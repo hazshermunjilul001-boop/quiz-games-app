@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F3F6F2;
+  --foreground: #1C2B24;
+  color-scheme: light;
+
+  /* Design tokens — "classroom stamp" palette. Teal instead of the default
+   * indigo/zinc so this doesn't read as a template; gold + coral pull from
+   * the gold-star-sticker / red-pen-correction vocabulary of an actual
+   * classroom rather than generic UI accent colors. */
+  --brand: #1F6E5C;
+  --brand-dark: #163F35;
+  --brand-light: #E6F0EC;
+  --gold: #E8A93B;
+  --gold-dark: #C98A22;
+  --correct: #2F9E5B;
+  --correct-bg: #E9F7EE;
+  --incorrect: #E4574B;
+  --incorrect-bg: #FDECEA;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-light: var(--brand-light);
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-correct: var(--correct);
+  --color-correct-bg: var(--correct-bg);
+  --color-incorrect: var(--incorrect);
+  --color-incorrect-bg: var(--incorrect-bg);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Signature element: a "stamp" pop — used for correct answers and the
+ * final score badge, echoing a teacher's rubber stamp / star sticker. */
+@keyframes stamp-in {
+  0% {
+    transform: scale(0.4) rotate(-8deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08) rotate(3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-2deg);
+    opacity: 1;
+  }
+}
+.stamp-pop {
+  animation: stamp-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp-pop {
+    animation: none;
+  }
+}
