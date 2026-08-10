@@ -80,30 +80,32 @@ export default function WordSearch({ bank, onExit }: { bank: QuestionBank; onExi
         ))}
       </div>
 
-      <div
-        className={`mt-4 inline-grid gap-0.5 select-none ${invalidFlash ? "animate-pulse" : ""}`}
-        style={{ gridTemplateColumns: `repeat(${grid.size}, minmax(0, 1fr))` }}
-      >
-        {grid.letters.map((row, r) =>
-          row.map((letter, c) => {
-            const isSelected = selStart?.r === r && selStart?.c === c;
-            const isFound = foundCells.has(`${r},${c}`);
-            return (
-              <button
-                key={`${r}-${c}`}
-                onClick={() => cellClick(r, c)}
-                className={[
-                  "w-7 h-7 flex items-center justify-center text-xs font-bold rounded cursor-pointer border",
-                  isFound ? "bg-green-100 border-green-300 text-green-800" : "",
-                  isSelected ? "bg-indigo-100 border-indigo-400 text-indigo-900" : "",
-                  !isFound && !isSelected ? "bg-white border-zinc-200 text-zinc-800 hover:bg-zinc-50" : "",
-                ].join(" ")}
-              >
-                {letter}
-              </button>
-            );
-          })
-        )}
+      <div className="mt-4 overflow-x-auto max-w-full pb-2">
+        <div
+          className={`inline-grid gap-0.5 select-none ${invalidFlash ? "animate-pulse" : ""}`}
+          style={{ gridTemplateColumns: `repeat(${grid.size}, minmax(0, 1fr))` }}
+        >
+          {grid.letters.map((row, r) =>
+            row.map((letter, c) => {
+              const isSelected = selStart?.r === r && selStart?.c === c;
+              const isFound = foundCells.has(`${r},${c}`);
+              return (
+                <button
+                  key={`${r}-${c}`}
+                  onClick={() => cellClick(r, c)}
+                  className={[
+                    "w-7 h-7 flex items-center justify-center text-xs font-bold rounded cursor-pointer border",
+                    isFound ? "bg-green-100 border-green-300 text-green-800" : "",
+                    isSelected ? "bg-indigo-100 border-indigo-400 text-indigo-900" : "",
+                    !isFound && !isSelected ? "bg-white border-zinc-200 text-zinc-800 hover:bg-zinc-50" : "",
+                  ].join(" ")}
+                >
+                  {letter}
+                </button>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {allFound && <CompletionCard message="All words found!" onAction={restart} />}

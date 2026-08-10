@@ -6,7 +6,11 @@ import { loadBank } from "@/lib/persistence";
 import { QuestionBank } from "@/lib/schema";
 import PlaySession from "@/components/PlaySession";
 
-type LoadState = { status: "loading" } | { status: "error"; message: string } | { status: "not-found" } | { status: "ready"; bank: QuestionBank };
+type LoadState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "not-found" }
+  | { status: "ready"; bank: QuestionBank; templateId: string | null };
 
 export default function SharedPlayPage() {
   const params = useParams<{ code: string }>();
@@ -15,9 +19,9 @@ export default function SharedPlayPage() {
   useEffect(() => {
     let cancelled = false;
     loadBank(params.code)
-      .then((bank) => {
+      .then((activity) => {
         if (cancelled) return;
-        setState(bank ? { status: "ready", bank } : { status: "not-found" });
+        setState(activity ? { status: "ready", bank: activity.bank, templateId: activity.templateId } : { status: "not-found" });
       })
       .catch((e: any) => {
         if (cancelled) return;
@@ -29,7 +33,7 @@ export default function SharedPlayPage() {
   }, [params.code]);
 
   if (state.status === "ready") {
-    return <PlaySession bank={state.bank} />;
+    return <PlaySession bank={state.bank} lockedTemplateId={state.templateId} />;
   }
 
   return (

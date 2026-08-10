@@ -71,13 +71,13 @@ export default function Hangman({ bank, onExit }: { bank: QuestionBank; onExit: 
           Wrong guesses: {wrongCount} / {MAX_WRONG}
         </p>
 
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 justify-center">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 justify-center overflow-x-auto max-w-full pb-1">
           {words.map((word, wi) => (
-            <div key={wi} className="flex gap-2">
+            <div key={wi} className="flex gap-1.5 shrink-0">
               {word.split("").map((l, i) => (
                 <span
                   key={i}
-                  className="w-8 h-10 flex items-center justify-center border-b-2 border-zinc-400 text-xl font-mono font-bold text-zinc-900"
+                  className="w-6 h-9 sm:w-8 sm:h-10 flex items-center justify-center border-b-2 border-zinc-400 text-lg sm:text-xl font-mono font-bold text-zinc-900"
                 >
                   {guessed.has(l) || roundOver ? l : ""}
                 </span>

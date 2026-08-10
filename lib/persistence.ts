@@ -19,15 +19,23 @@ export interface SaveResult {
   code: string;
 }
 
+export interface LoadedActivity {
+  bank: QuestionBank;
+  /** If set, students should skip the template picker and go straight
+   * into this specific game — the teacher locked the share link to it. */
+  templateId: string | null;
+}
+
 export interface SavedActivity {
   code: string;
   title: string;
   source: string;
   questionCount: number;
   createdAt: string;
+  templateId: string | null;
 }
 
-export async function saveBank(bank: QuestionBank): Promise<SaveResult> {
+export async function saveBank(bank: QuestionBank, templateId: string | null = null): Promise<SaveResult> {
   if (!isSupabaseConfigured) {
     throw new Error("Saving requires Supabase to be configured (see supabase/schema.sql).");
   }
@@ -41,6 +49,7 @@ export async function saveBank(bank: QuestionBank): Promise<SaveResult> {
     source: bank.source,
     bank_json: bank,
     user_id: userData.user?.id ?? null,
+    template_id: templateId,
   });
 
   if (error) {
@@ -54,7 +63,7 @@ export async function saveBank(bank: QuestionBank): Promise<SaveResult> {
  * why: a direct SELECT policy permissive enough for anonymous students to
  * use would also let anyone with the public anon key list every saved
  * quiz, not just the one they have the code for. */
-export async function loadBank(code: string): Promise<QuestionBank | null> {
+export async function loadBank(code: string): Promise<LoadedActivity | null> {
   if (!isSupabaseConfigured) {
     throw new Error("Loading a shared quiz requires Supabase to be configured (see supabase/schema.sql).");
   }
@@ -66,7 +75,7 @@ export async function loadBank(code: string): Promise<QuestionBank | null> {
   }
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
-  return row.bank_json as QuestionBank;
+  return { bank: row.bank_json as QuestionBank, templateId: row.template_id ?? null };
 }
 
 /** Lists the signed-in teacher's own saved quizzes, newest first. Requires
@@ -78,7 +87,7 @@ export async function listMyBanks(): Promise<SavedActivity[]> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from(TABLE)
-    .select("code, title, source, bank_json, created_at")
+    .select("code, title, source, bank_json, created_at, template_id")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -90,6 +99,7 @@ export async function listMyBanks(): Promise<SavedActivity[]> {
     source: row.source,
     questionCount: (row.bank_json as QuestionBank)?.questions?.length ?? 0,
     createdAt: row.created_at,
+    templateId: row.template_id ?? null,
   }));
 }
 

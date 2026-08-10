@@ -3,12 +3,12 @@
 import { useRef, useState } from "react";
 import { extractTextFromFile } from "@/lib/fileParse";
 import { importFromText, ImportResult } from "@/lib/importPipeline";
-import { saveBank } from "@/lib/persistence";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useCurrentUser } from "@/lib/auth";
 import PlaySession from "@/components/PlaySession";
 import Welcome from "@/components/Welcome";
 import CustomImport from "@/components/CustomImport";
+import ShareLinkModal from "@/components/ShareLinkModal";
 
 type Screen = "welcome" | "import" | "custom" | "play";
 
@@ -63,7 +63,7 @@ export default function Home() {
   }
 
   if (screen === "play" && result) {
-    return <PlaySession bank={result.bank} onBack={() => setScreen("import")} />;
+    return <PlaySession bank={result.bank} onBack={() => setScreen("import")} allowSharing />;
   }
 
   return (
@@ -144,30 +144,6 @@ export default function Home() {
 function ImportPreview({ result, onPlay }: { result: ImportResult; onPlay: () => void }) {
   const { user } = useCurrentUser();
   const { bank, warnings } = result;
-  const [saving, setSaving] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  async function handleSave() {
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const { code } = await saveBank(bank);
-      setShareUrl(`${window.location.origin}/play/${code}`);
-    } catch (e: any) {
-      setSaveError(e.message ?? "Couldn't save this quiz.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function copyLink() {
-    if (!shareUrl) return;
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
 
   return (
     <div className="mt-6 space-y-4">
@@ -231,42 +207,24 @@ function ImportPreview({ result, onPlay }: { result: ImportResult; onPlay: () =>
           </p>
         )}
 
-        {isSupabaseConfigured && !shareUrl && (
+        {isSupabaseConfigured && (
           <>
             <p className="text-sm text-zinc-500 mt-1 mb-3">
-              Saves this quiz so you can share a link — anyone with the link can play it without logging in.{" "}
+              Lets students play without logging in.{" "}
               {user
                 ? "You're signed in, so this will also show up in My Activities."
-                : "Sign in from the banner above first if you want to find this quiz again later in My Activities — otherwise it'll only be reachable by this link."}
+                : "Sign in from the banner above first if you want to find this quiz again later in My Activities."}{" "}
+              Prefer everyone playing the same specific game? Pick a game first (below), then use its own{" "}
+              <strong>Share this game only</strong> link instead.
             </p>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-brand text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-brand-dark disabled:opacity-50 active:scale-95 transition-all cursor-pointer"
-            >
-              {saving ? "Saving..." : "Save & Get Share Link"}
-            </button>
-            {saveError && <p className="text-sm text-incorrect mt-2">{saveError}</p>}
+            <ShareLinkModal
+              bank={bank}
+              templateId={null}
+              triggerLabel="Save & Get Share Link"
+              triggerClassName="bg-brand text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-brand-dark active:scale-95 transition-all cursor-pointer"
+              helpText="Anyone with this link can play it without logging in — they'll pick which game to play themselves."
+            />
           </>
-        )}
-
-        {shareUrl && (
-          <div className="mt-2">
-            <div className="flex items-center gap-2">
-              <input
-                readOnly
-                value={shareUrl}
-                className="flex-1 border-2 border-zinc-200 rounded-xl p-2.5 text-sm bg-zinc-50 text-zinc-900"
-              />
-              <button
-                onClick={copyLink}
-                className="border-2 border-zinc-200 bg-white text-[var(--foreground)] text-sm font-bold px-4 py-2.5 rounded-xl hover:bg-zinc-50 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-            <p className="text-sm text-zinc-500 mt-2">Share this with students — no login needed on their end.</p>
-          </div>
         )}
       </div>
     </div>

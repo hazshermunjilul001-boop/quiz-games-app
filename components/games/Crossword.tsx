@@ -59,27 +59,28 @@ export default function Crossword({ bank, onExit }: { bank: QuestionBank; onExit
       )}
 
       <div className="mt-4 grid md:grid-cols-[auto_1fr] gap-6">
-        <div
-          className="inline-grid gap-0.5 bg-zinc-900 p-0.5 rounded-md"
-          style={{ gridTemplateColumns: `repeat(${grid.width}, minmax(0, 1fr))` }}
-        >
-          {grid.cells.map((row, r) =>
-            row.map((cell, c) => {
-              if (cell === null) return <div key={`${r}-${c}`} className="w-8 h-8 bg-zinc-900" />;
-              const num = grid.placed.find((p) => p.row === r && p.col === c)?.number;
-              const value = input[`${r},${c}`] ?? "";
-              const isCorrect = checked && value === cell;
-              const isWrong = checked && value !== cell;
-              return (
-                <div key={`${r}-${c}`} className="relative w-8 h-8 bg-white">
-                  {num && <span className="absolute top-0 left-0.5 text-[8px] text-zinc-500 leading-none">{num}</span>}
-                  <input
-                    value={value}
-                    onChange={(e) => setLetter(r, c, e.target.value)}
-                    disabled={checked}
-                    maxLength={1}
-                    className={[
-                      "w-8 h-8 text-center text-sm font-bold uppercase outline-none",
+        <div className="overflow-x-auto max-w-full pb-2">
+          <div
+            className="inline-grid gap-0.5 bg-zinc-900 p-0.5 rounded-md"
+            style={{ gridTemplateColumns: `repeat(${grid.width}, minmax(0, 1fr))` }}
+          >
+            {grid.cells.map((row, r) =>
+              row.map((cell, c) => {
+                if (cell === null) return <div key={`${r}-${c}`} className="w-8 h-8 bg-zinc-900" />;
+                const num = grid.placed.find((p) => p.row === r && p.col === c)?.number;
+                const value = input[`${r},${c}`] ?? "";
+                const isCorrect = checked && value === cell;
+                const isWrong = checked && value !== cell;
+                return (
+                  <div key={`${r}-${c}`} className="relative w-8 h-8 bg-white">
+                    {num && <span className="absolute top-0 left-0.5 text-[8px] text-zinc-500 leading-none">{num}</span>}
+                    <input
+                      value={value}
+                      onChange={(e) => setLetter(r, c, e.target.value)}
+                      disabled={checked}
+                      maxLength={1}
+                      className={[
+                        "w-8 h-8 text-center text-sm font-bold uppercase outline-none",
                       isCorrect ? "bg-green-50 text-green-700" : "",
                       isWrong ? "bg-red-50 text-red-700" : "",
                       !checked ? "text-zinc-900" : "",
@@ -89,6 +90,7 @@ export default function Crossword({ bank, onExit }: { bank: QuestionBank; onExit
               );
             })
           )}
+          </div>
         </div>
 
         <div className="space-y-4 text-sm">

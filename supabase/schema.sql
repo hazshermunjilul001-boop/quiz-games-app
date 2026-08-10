@@ -22,6 +22,15 @@ create table if not exists question_banks (
 -- "My Activities". Accounts are additive, never required.
 alter table question_banks add column if not exists user_id uuid references auth.users(id) on delete cascade;
 
+-- Optional: lets a teacher lock a share link to one specific game instead
+-- of sending students to the full template picker. Null means "let the
+-- student pick from whatever's available" (the original behavior).
+alter table question_banks add column if not exists template_id text;
+
+-- get_shared_quiz() (further down) needs updating for this new column on
+-- an existing database — see the CREATE OR REPLACE below, which handles
+-- that automatically since function definitions are just replaced.
+
 alter table question_banks enable row level security;
 
 -- SECURITY NOTE — this replaces an earlier version of this file. The old
