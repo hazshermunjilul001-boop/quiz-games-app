@@ -118,7 +118,7 @@ export default function Welcome({ onGetStarted }: { onGetStarted: () => void }) 
           >
             Import your test →
           </button>
-          <p className="text-sm text-zinc-500 mt-3">Free, always — made by a DepEd teacher, for DepEd teachers.</p>
+          <p className="text-sm text-zinc-500 mt-3">Built with ❤️ by Hazsher B. Munjilul · Sta. Ana NHS · DepEd Region XI, Division of Davao City — made by a teacher, for DepEd teachers.</p>
         </div>
       </div>
     </div>
