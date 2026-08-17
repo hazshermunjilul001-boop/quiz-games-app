@@ -63,7 +63,14 @@ export default function Home() {
   }
 
   if (screen === "play" && result) {
-    return <PlaySession bank={result.bank} onBack={() => setScreen("import")} allowSharing />;
+    return (
+      <PlaySession
+        bank={result.bank}
+        onBack={() => setScreen("import")}
+        allowSharing
+        onCreateCustom={() => setScreen("custom")}
+      />
+    );
   }
 
   return (
@@ -75,10 +82,14 @@ export default function Home() {
         >
           ← Back to welcome
         </button>
-        <h1 className="text-3xl font-extrabold text-[var(--foreground)] tracking-tight mt-2">Quiz Games</h1>
+        <h1 className="text-3xl font-extrabold text-[var(--foreground)] tracking-tight mt-2">Import your test</h1>
         <p className="text-zinc-600 mt-2 text-base">
           Paste a test, or upload a .txt / .docx / .pdf / .json file — including
           output from TOS AI Generator — then pick a game to play it.
+        </p>
+        <p className="text-sm text-zinc-500 mt-1">
+          Best results with clean .txt, .docx, or a TOS AI Generator export — scanned or image-heavy PDFs
+          can extract messily, so double-check the preview below before playing.
         </p>
 
         <div className="mt-6 bg-white rounded-2xl border border-zinc-200 p-5 shadow-sm">

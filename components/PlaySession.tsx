@@ -13,6 +13,7 @@ export default function PlaySession({
   backLabel = "Back to import",
   lockedTemplateId,
   allowSharing = false,
+  onCreateCustom,
 }: {
   bank: QuestionBank;
   /** Omit for a shared/student link — hides the back button entirely. */
@@ -27,6 +28,9 @@ export default function PlaySession({
   /** Show "Share this game" per template — only for the teacher's own
    * session, never for a student on a shared link. */
   allowSharing?: boolean;
+  /** Jump to the custom-content flow — only meaningful for the teacher's
+   * own session, never for a student on a shared link. */
+  onCreateCustom?: () => void;
 }) {
   const [templateId, setTemplateId] = useState<string | null>(lockedTemplateId ?? null);
   const [started, setStarted] = useState(false);
@@ -69,7 +73,14 @@ export default function PlaySession({
   return (
     <div className="min-h-screen bg-[var(--background)]">
       <div className="max-w-3xl mx-auto px-6 py-10">
-        <TemplatePicker bank={bank} onBack={onBack} backLabel={backLabel} onChoose={(id) => setTemplateId(id)} allowSharing={allowSharing} />
+        <TemplatePicker
+          bank={bank}
+          onBack={onBack}
+          backLabel={backLabel}
+          onChoose={(id) => setTemplateId(id)}
+          allowSharing={allowSharing}
+          onCreateCustom={onCreateCustom}
+        />
       </div>
     </div>
   );

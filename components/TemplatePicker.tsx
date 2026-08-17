@@ -3,6 +3,7 @@
 import { QuestionBank } from "@/lib/schema";
 import { TEMPLATES, isTemplateAvailable } from "./templateRegistry";
 import ShareLinkModal from "./ShareLinkModal";
+import ReportProblemLink from "./ReportProblemLink";
 
 export default function TemplatePicker({
   bank,
@@ -10,6 +11,7 @@ export default function TemplatePicker({
   onBack,
   backLabel = "Back to import",
   allowSharing = false,
+  onCreateCustom,
 }: {
   bank: QuestionBank;
   onChoose: (templateId: string) => void;
@@ -18,7 +20,15 @@ export default function TemplatePicker({
   /** Show a "Share this game" action per card — only relevant for the
    * teacher's own flow, never on a student's shared-link view. */
   allowSharing?: boolean;
+  /** When provided, shown as a link from the compatibility summary so a
+   * teacher can jump straight to writing custom content for the games
+   * that need it (Rank Order, Crossword, Complete the Sentence, Group Sort). */
+  onCreateCustom?: () => void;
 }) {
+  const availability = TEMPLATES.map((t) => ({ template: t, available: isTemplateAvailable(bank, t) }));
+  const availableCount = availability.filter((a) => a.available).length;
+  const unavailableCount = TEMPLATES.length - availableCount;
+
   return (
     <div className="max-w-3xl mx-auto">
       {onBack && (
@@ -30,6 +40,23 @@ export default function TemplatePicker({
         Choose a game for &ldquo;{bank.title}&rdquo;
       </h2>
       <p className="text-base text-zinc-500 mt-1">{bank.questions.length} questions imported</p>
+
+      <div className="mt-4 bg-brand-light border border-brand/20 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm font-bold text-brand-dark">
+          {availableCount} of {TEMPLATES.length} games available
+          {unavailableCount > 0 && (
+            <span className="font-medium"> · {unavailableCount} need different answer formats</span>
+          )}
+        </p>
+        {unavailableCount > 0 && onCreateCustom && (
+          <button
+            onClick={onCreateCustom}
+            className="text-xs font-bold text-brand hover:text-brand-dark underline underline-offset-2 cursor-pointer"
+          >
+            Write custom content for those instead →
+          </button>
+        )}
+      </div>
 
       <div className="mt-6 grid sm:grid-cols-2 gap-4">
         {TEMPLATES.map((t) => {
@@ -73,6 +100,10 @@ export default function TemplatePicker({
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-6 text-center">
+        <ReportProblemLink quizTitle={bank.title} />
       </div>
     </div>
   );

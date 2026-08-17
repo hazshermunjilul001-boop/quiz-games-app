@@ -29,11 +29,21 @@ export interface GameProps {
   onExit: () => void;
 }
 
+export type TemplateCategory = "review" | "word" | "action";
+
+export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
+  review: "Review games",
+  word: "Word games",
+  action: "Action games",
+};
+
 export interface TemplateDef {
   id: string;
   name: string;
   description: string;
   icon: string;
+  /** Which section this template appears under on the Welcome page. */
+  category: TemplateCategory;
   /** Shown to teachers before/while choosing a template — what kind of
    * source questions actually work well for this game. */
   teacherTip: string;
@@ -66,6 +76,7 @@ function getWordOnlyBank(bank: QuestionBank): QuestionBank {
 export const TEMPLATES: TemplateDef[] = [
   {
     id: "quiz",
+    category: "review",
     icon: "🎯",
     name: "Quiz",
     description: "A series of multiple choice questions. Tap the correct answer to proceed.",
@@ -75,6 +86,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "true-false",
+    category: "review",
     icon: "⚖️",
     name: "True or False",
     description: "Decide whether each statement is true or false.",
@@ -84,6 +96,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "flash-cards",
+    category: "review",
     icon: "🗂️",
     name: "Flash Cards",
     description: "Test yourself using cards with prompts on the front and answers on the back.",
@@ -93,6 +106,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "open-the-box",
+    category: "review",
     icon: "📦",
     name: "Open the Box",
     description: "Tap each box in turn to open them up and reveal the item inside.",
@@ -101,6 +115,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "spin-the-wheel",
+    category: "review",
     icon: "🎡",
     name: "Spin the Wheel",
     description: "Spin the wheel to see which item comes up next.",
@@ -109,6 +124,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "matching-pairs",
+    category: "review",
     icon: "🧩",
     name: "Matching Pairs",
     description: "Tap a pair of tiles at a time to reveal if they are a match.",
@@ -118,6 +134,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "match-up",
+    category: "review",
     icon: "🔗",
     name: "Match Up",
     description: "Tap each keyword next to its definition.",
@@ -127,6 +144,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "group-sort",
+    category: "review",
     icon: "🗃️",
     name: "Group Sort",
     description: "Sort each item into its correct group.",
@@ -139,6 +157,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "unjumble",
+    category: "word",
     icon: "🔀",
     name: "Unjumble",
     description: "Tap the words in the correct order to rebuild the answer.",
@@ -150,6 +169,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "word-magnets",
+    category: "word",
     icon: "🧲",
     name: "Word Magnets",
     description: "Drag and drop the words to arrange into sentences.",
@@ -161,6 +181,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "rank-order",
+    category: "review",
     icon: "📶",
     name: "Rank Order",
     description: "Tap the items into their correct order.",
@@ -170,6 +191,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "balloon-pop",
+    category: "review",
     icon: "🎈",
     name: "Balloon Pop",
     description: "Pop the balloons to drop each keyword onto its matching definition.",
@@ -179,6 +201,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "whack-a-mole",
+    category: "action",
     icon: "🔨",
     name: "Whack-a-Mole",
     description: "Moles appear one at a time, hit only the correct ones to win.",
@@ -188,6 +211,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "flying-fruit",
+    category: "action",
     icon: "🍎",
     name: "Flying Fruit",
     description: "Answers move across the screen. Tap the correct answer when you see it.",
@@ -197,6 +221,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "airplane",
+    category: "action",
     icon: "✈️",
     name: "Airplane",
     description: "Tap into the correct answers and avoid the wrong ones.",
@@ -206,6 +231,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "maze-chase",
+    category: "action",
     icon: "🏃",
     name: "Maze Chase",
     description: "Run to the correct answer zone, whilst avoiding enemies.",
@@ -215,6 +241,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "anagram",
+    category: "word",
     icon: "🔤",
     name: "Anagram",
     description: "Drag the letters into their correct positions to unscramble the word.",
@@ -225,6 +252,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "spell-the-word",
+    category: "word",
     icon: "✍️",
     name: "Spell the Answer",
     description: "Type the letters to spell the answer.",
@@ -235,6 +263,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "hangman",
+    category: "word",
     icon: "🎩",
     name: "Hangman",
     description: "Try to complete the word by picking the correct letters.",
@@ -245,6 +274,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "wordsearch",
+    category: "word",
     icon: "🔍",
     name: "Word Search",
     description: "Words are hidden in a letter grid. Find them as fast as you can.",
@@ -255,6 +285,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "crossword",
+    category: "word",
     icon: "📝",
     name: "Crossword",
     description: "Use the clues to solve the crossword.",
@@ -265,6 +296,7 @@ export const TEMPLATES: TemplateDef[] = [
   },
   {
     id: "complete-the-sentence",
+    category: "review",
     icon: "💬",
     name: "Complete the Sentence",
     description: "A cloze activity where you drag words into blanks within a text.",

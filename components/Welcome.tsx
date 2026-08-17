@@ -1,16 +1,38 @@
 "use client";
 
+import { useState } from "react";
 import { BRAND_NAME, BRAND_TAGLINE } from "@/lib/brand";
-import { TEMPLATES } from "@/components/templateRegistry";
+import { TEMPLATES, TEMPLATE_CATEGORY_LABELS, TemplateCategory } from "@/components/templateRegistry";
+
+const CATEGORY_ORDER: TemplateCategory[] = ["review", "word", "action"];
+const CATEGORY_BLURB: Record<TemplateCategory, string> = {
+  review: "Quiz-style and matching formats — the safest bet for any multiple-choice test.",
+  word: "Spelling, unscrambling, and word-grid formats — best when an answer is a single word or short phrase.",
+  action: "Fast-paced, arcade-style formats — tap or move to the correct answer under time pressure.",
+};
 
 export default function Welcome({ onGetStarted }: { onGetStarted: () => void }) {
+  const [openCategory, setOpenCategory] = useState<TemplateCategory | null>("review");
+
   return (
     <div className="min-h-screen bg-[var(--background)]">
       <div className="max-w-3xl mx-auto px-6 py-12">
         <div className="text-center">
-          <span className="text-5xl">🎓</span>
+          <span className="text-5xl">🎮</span>
           <h1 className="text-4xl font-extrabold text-[var(--foreground)] mt-3 tracking-tight">{BRAND_NAME}</h1>
           <p className="text-lg text-zinc-600 mt-2 max-w-xl mx-auto">{BRAND_TAGLINE}</p>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <span className="text-xs font-bold bg-brand-light text-brand-dark px-3 py-1.5 rounded-full">
+              For DepEd teachers
+            </span>
+            <span className="text-xs font-bold bg-brand-light text-brand-dark px-3 py-1.5 rounded-full">
+              Free
+            </span>
+            <span className="text-xs font-bold bg-brand-light text-brand-dark px-3 py-1.5 rounded-full">
+              No student accounts needed
+            </span>
+          </div>
         </div>
 
         <div className="mt-8 bg-white border border-zinc-200 rounded-3xl p-6 shadow-sm">
@@ -42,19 +64,50 @@ export default function Welcome({ onGetStarted }: { onGetStarted: () => void }) 
             Every game works differently, so some need a particular kind of question to make sense — that's noted under each one.
           </p>
 
-          <div className="mt-5 grid sm:grid-cols-2 gap-3">
-            {TEMPLATES.map((t) => (
-              <div key={t.id} className="bg-white border border-zinc-200 rounded-2xl p-4">
-                <div className="flex items-start gap-3">
-                  <span className="text-xl leading-none">{t.icon}</span>
-                  <div>
-                    <p className="font-bold text-[var(--foreground)]">{t.name}</p>
-                    <p className="text-sm text-zinc-500 mt-0.5">{t.description}</p>
-                    <p className="text-xs text-brand-dark font-medium mt-1.5">For teachers: {t.teacherTip}</p>
-                  </div>
+          <div className="mt-5 space-y-3">
+            {CATEGORY_ORDER.map((cat) => {
+              const templates = TEMPLATES.filter((t) => t.category === cat);
+              const isOpen = openCategory === cat;
+              return (
+                <div key={cat} className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+                  <button
+                    onClick={() => setOpenCategory(isOpen ? null : cat)}
+                    className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left cursor-pointer hover:bg-zinc-50 transition-colors"
+                  >
+                    <div>
+                      <p className="font-bold text-[var(--foreground)]">
+                        {TEMPLATE_CATEGORY_LABELS[cat]}{" "}
+                        <span className="text-zinc-400 font-normal text-sm">· {templates.length} games</span>
+                      </p>
+                      <p className="text-sm text-zinc-500 mt-0.5">{CATEGORY_BLURB[cat]}</p>
+                    </div>
+                    <span
+                      className={`shrink-0 text-zinc-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                      aria-hidden
+                    >
+                      ▾
+                    </span>
+                  </button>
+
+                  {isOpen && (
+                    <div className="px-5 pb-5 grid sm:grid-cols-2 gap-3">
+                      {templates.map((t) => (
+                        <div key={t.id} className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4">
+                          <div className="flex items-start gap-3">
+                            <span className="text-xl leading-none">{t.icon}</span>
+                            <div>
+                              <p className="font-bold text-[var(--foreground)]">{t.name}</p>
+                              <p className="text-sm text-zinc-500 mt-0.5">{t.description}</p>
+                              <p className="text-xs text-brand-dark font-medium mt-1.5">For teachers: {t.teacherTip}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -65,7 +118,7 @@ export default function Welcome({ onGetStarted }: { onGetStarted: () => void }) 
           >
             Import your test →
           </button>
-          <p className="text-sm text-zinc-500 mt-3">Free, always — made by a teacher for DepEd teachers.</p>
+          <p className="text-sm text-zinc-500 mt-3">Free, always — made by a DepEd teacher, for DepEd teachers.</p>
         </div>
       </div>
     </div>
