@@ -221,7 +221,8 @@ function ImportPreview({ result, onPlay }: { result: ImportResult; onPlay: () =>
         {isSupabaseConfigured && (
           <>
             <p className="text-sm text-zinc-500 mt-1 mb-3">
-              Lets students play without logging in.{" "}
+              Students sign in with their name before taking it — answers stay hidden until the
+              end, and each attempt is timed, numbered, and reviewed item by item.{" "}
               {user
                 ? "You're signed in, so this will also show up in My Activities."
                 : "Sign in from the banner above first if you want to find this quiz again later in My Activities."}{" "}
@@ -233,7 +234,7 @@ function ImportPreview({ result, onPlay }: { result: ImportResult; onPlay: () =>
               templateId={null}
               triggerLabel="Save & Get Share Link"
               triggerClassName="bg-brand text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-brand-dark active:scale-95 transition-all cursor-pointer"
-              helpText="Anyone with this link can play it without logging in — they'll pick which game to play themselves."
+              helpText="Anyone opening this link signs in with their name first — then they'll pick which game to play themselves."
             />
           </>
         )}

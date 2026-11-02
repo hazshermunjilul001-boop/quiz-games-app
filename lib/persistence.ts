@@ -113,3 +113,64 @@ export async function deleteBank(code: string): Promise<void> {
     throw new Error(`Couldn't delete this quiz: ${error.message}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Student attempts (teacher dashboard)
+// ---------------------------------------------------------------------------
+
+/** One recorded attempt, as stored in Supabase. `details` carries the
+ * per-item review the student saw on their results screen. */
+export interface AttemptRow {
+  id: string;
+  shareCode: string;
+  studentName: string;
+  studentKey: string;
+  studentSection: string;
+  game: string;
+  attemptNumber: number;
+  score: number;
+  total: number;
+  durationSec: number;
+  details: Array<{
+    label: string;
+    prompt: string;
+    yourAnswer: string;
+    correctAnswer: string;
+    isCorrect: boolean;
+  }>;
+  finishedAt: string;
+}
+
+/** Every attempt recorded on the signed-in teacher's quizzes, newest
+ * first. RLS scopes this to rows owned by the caller — see the "owner can
+ * read their quizzes' attempts" policy in supabase/schema.sql. */
+export async function listAttemptsForMyQuizzes(): Promise<AttemptRow[]> {
+  if (!isSupabaseConfigured) {
+    throw new Error("This requires Supabase to be configured (see supabase/schema.sql).");
+  }
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("quiz_attempts")
+    .select(
+      "id, share_code, student_name, student_key, student_section, game, attempt_number, score, total, duration_sec, details, finished_at"
+    )
+    .order("finished_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Couldn't load student attempts: ${error.message}`);
+  }
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    shareCode: row.share_code,
+    studentName: row.student_name,
+    studentKey: row.student_key,
+    studentSection: row.student_section ?? "",
+    game: row.game,
+    attemptNumber: row.attempt_number,
+    score: row.score,
+    total: row.total,
+    durationSec: row.duration_sec,
+    details: Array.isArray(row.details) ? row.details : [],
+    finishedAt: row.finished_at,
+  }));
+}

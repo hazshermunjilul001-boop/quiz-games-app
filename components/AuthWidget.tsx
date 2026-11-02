@@ -55,6 +55,9 @@ export default function AuthWidget() {
         <Link href="/activities" className="text-sm font-bold text-white/90 hover:text-white underline underline-offset-2">
           My Activities
         </Link>
+        <Link href="/dashboard" className="text-sm font-bold text-white/90 hover:text-white underline underline-offset-2">
+          Student Results
+        </Link>
         <span className="text-xs text-white/60 hidden sm:inline">{user.email}</span>
         <button onClick={() => signOut()} className="text-sm font-bold text-white/90 hover:text-white underline underline-offset-2 cursor-pointer">
           Sign out

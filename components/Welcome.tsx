@@ -30,7 +30,7 @@ export default function Welcome({ onGetStarted }: { onGetStarted: () => void }) 
               Free
             </span>
             <span className="text-xs font-bold bg-brand-light text-brand-dark px-3 py-1.5 rounded-full">
-              No student accounts needed
+              Students sign in by name
             </span>
           </div>
         </div>
@@ -54,7 +54,11 @@ export default function Welcome({ onGetStarted }: { onGetStarted: () => void }) 
               the MCQ import entirely and write content made specifically for that game — the import
               screen has a &ldquo;Create custom&rdquo; option for that.
             </li>
-            <li>Play it yourself, or save it and share a link with your students — no login needed on their end.</li>
+            <li>
+              Play it yourself, or save it and share a link with your students — they sign in with
+              their name first, answers stay hidden while they work, and every attempt is timed,
+              numbered, and reviewed item by item at the end.
+            </li>
           </ol>
         </div>
 

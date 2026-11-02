@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { QuestionBank } from "@/lib/schema";
 import { saveBank } from "@/lib/persistence";
 
@@ -22,6 +23,7 @@ export default function ShareLinkModal({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareCode, setShareCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -29,6 +31,7 @@ export default function ShareLinkModal({
     setOpen(false);
     setSaving(false);
     setShareUrl(null);
+    setShareCode(null);
     setError(null);
     setCopied(false);
   }
@@ -39,6 +42,7 @@ export default function ShareLinkModal({
     try {
       const { code } = await saveBank(bank, templateId);
       setShareUrl(`${window.location.origin}/play/${code}`);
+      setShareCode(code);
     } catch (e: any) {
       setError(e.message ?? "Couldn't save this quiz.");
     } finally {
@@ -89,7 +93,13 @@ export default function ShareLinkModal({
                     {copied ? "Copied!" : "Copy"}
                   </button>
                 </div>
-                <p className="text-sm text-zinc-500 mt-2">Share this with students — no login needed on their end.</p>
+                <p className="text-sm text-zinc-500 mt-2">Share this with students — they&rsquo;ll sign in with their name to take it.</p>
+                <p className="text-sm mt-1">
+                  <Link href={`/dashboard?quiz=${shareCode}`} className="text-brand hover:text-brand-dark font-bold underline underline-offset-2">
+                    Track their results here →
+                  </Link>
+                  <span className="text-zinc-500"> every attempt, score, time, and item review lands in your dashboard.</span>
+                </p>
               </div>
             )}
 

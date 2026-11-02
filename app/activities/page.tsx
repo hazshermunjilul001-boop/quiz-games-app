@@ -90,6 +90,12 @@ export default function ActivitiesPage() {
                   >
                     Play
                   </a>
+                  <a
+                    href={`/dashboard?quiz=${a.code}`}
+                    className="border-2 border-gold/50 bg-gold/10 text-gold-dark text-sm font-bold px-3 py-2 rounded-lg hover:bg-gold/20 active:scale-95 transition-all"
+                  >
+                    Results
+                  </a>
                   <button
                     onClick={() => copyLink(a.code)}
                     className="border-2 border-zinc-200 bg-white text-[var(--foreground)] text-sm font-bold px-3 py-2 rounded-lg hover:bg-zinc-50 active:scale-95 transition-all cursor-pointer"

@@ -1,6 +1,7 @@
 import { ComponentType } from "react";
 import { QuestionBank, QuestionType } from "@/lib/schema";
 import { deriveTermDefinitionPairs, deriveOrderedSequenceFromMcq, deriveSingleTermFromMcq, deriveLetterSequenceFromMcq, deriveClozeFromMcq, deriveWordOnlyTermsFromMcq } from "@/lib/importPipeline";
+import { AttemptContext } from "@/lib/attempts";
 import QuizGame from "@/components/games/QuizGame";
 import TrueFalseGame from "@/components/games/TrueFalseGame";
 import FlashCards from "@/components/games/FlashCards";
@@ -27,6 +28,12 @@ import CompleteTheSentence from "@/components/games/CompleteTheSentence";
 export interface GameProps {
   bank: QuestionBank;
   onExit: () => void;
+  /** Present only when playing through a signed-in shared student link
+   * (/play/[code]) — lets the attempt-tracked games (Quiz, True or False,
+   * and the exam-mode arcade games: Whack-a-Mole, Flying Fruit, Airplane,
+   * Maze Chase) record and number attempts. Every other template simply
+   * ignores it. */
+  attemptContext?: AttemptContext;
 }
 
 export type TemplateCategory = "review" | "word" | "action";

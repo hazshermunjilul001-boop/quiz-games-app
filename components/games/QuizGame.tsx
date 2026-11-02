@@ -1,28 +1,99 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+// components/games/QuizGame.tsx
+// The classic question-by-question quiz. EXAM MODE:
+//  - Picking an answer never reveals whether it was right — no colors, no
+//    stamps — students only see "Next question" and move on.
+//  - The full item-by-item review (correct/wrong + the right answer for
+//    every missed item), the time taken, and the attempt number appear all
+//    at once on the results screen at the end.
+//  - On a signed-in shared link (attemptContext prop), every completed run
+//    is recorded as a numbered attempt for that student (lib/attempts.ts).
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import { McqQuestion, QuestionBank } from "@/lib/schema";
 import { shuffle } from "@/lib/gameHelpers";
+import {
+  AttemptContext,
+  AttemptSummary,
+  getNextAttemptNumber,
+  refreshAttemptNumber,
+  saveCompletedAttempt,
+} from "@/lib/attempts";
+import QuizResults, { ReviewItem } from "./QuizResults";
 import Confetti from "./Confetti";
 
-export default function QuizGame({ bank, onExit }: { bank: QuestionBank; onExit: () => void }) {
-  const questions = useMemo(
-    () => shuffle(bank.questions.filter((q): q is McqQuestion => q.type === "mcq")),
+interface PreparedQuestion {
+  q: McqQuestion;
+  /** The choice order for THIS run, pre-shuffled once — remembered so the
+   * end-of-quiz review can map the student's pick back to correctness. */
+  shuffled: { text: string; isCorrect: boolean }[];
+  /** Text of the correct choice, in the ORIGINAL choices order — used as
+   * "Correct answer" in the review (stable regardless of shuffling). */
+  correctText: string;
+}
+
+export default function QuizGame({
+  bank,
+  onExit,
+  attemptContext,
+}: {
+  bank: QuestionBank;
+  onExit: () => void;
+  /** Present only on a signed-in shared student link. */
+  attemptContext?: AttemptContext;
+}) {
+  // Prepare every question (shuffle all choices) once per run up front, so
+  // answers can be scored and reviewed at the end.
+  const questions = useMemo<PreparedQuestion[]>(
+    () =>
+      shuffle(bank.questions.filter((q): q is McqQuestion => q.type === "mcq")).map((q) => ({
+        q,
+        shuffled: shuffle(q.choices.map((text, i) => ({ text, isCorrect: i === q.correctIndex }))),
+        correctText: q.choices[q.correctIndex],
+      })),
     [bank]
   );
+
   const [index, setIndex] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [score, setScore] = useState(0);
+  /** Chosen shuffled-choice index per question; null = not yet answered. */
+  const [answers, setAnswers] = useState<(number | null)[]>(() => questions.map(() => null));
   const [done, setDone] = useState(false);
+  /** Increments on every retake so the header timer restarts each run. */
+  const [runId, setRunId] = useState(0);
+
+  // When this run started (for "time taken"). Re-set after every remount
+  // and retake — effects run before the student can possibly finish, so
+  // finish() always reads a fresh timestamp.
+  const startedAtRef = useRef(0);
+  useEffect(() => {
+    startedAtRef.current = Date.now();
+  }, [runId]);
+
+  // The attempt THIS run is, computed once at run start from the best
+  // information on this device. 0 = not tracked (teacher's own local
+  // session — no numbering, no recording). Corrected once the server
+  // answers, in case the student played on another device too.
+  const [attemptNumber, setAttemptNumber] = useState(() =>
+    attemptContext ? getNextAttemptNumber(attemptContext) : 0
+  );
+  useEffect(() => {
+    if (!attemptContext) return;
+    let cancelled = false;
+    refreshAttemptNumber(attemptContext).then((n) => {
+      if (!cancelled) setAttemptNumber(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attemptContext]);
+  // Summary filled in when the run finishes (attempt recorded → totals known).
+  const [attemptSummary, setAttemptSummary] = useState<AttemptSummary | null>(null);
+  const [review, setReview] = useState<ReviewItem[]>([]);
+  const [durationSec, setDurationSec] = useState(0);
 
   const current = questions[index];
-  // Shuffle each question's choice order once per question, but remember
-  // which shuffled position is correct.
-  const shuffledChoices = useMemo(() => {
-    if (!current) return [];
-    const withIndex = current.choices.map((text, i) => ({ text, isCorrect: i === current.correctIndex }));
-    return shuffle(withIndex);
-  }, [current]);
+  const selected = answers[index];
 
   if (questions.length === 0) {
     return (
@@ -32,32 +103,87 @@ export default function QuizGame({ bank, onExit }: { bank: QuestionBank; onExit:
 
   function choose(i: number) {
     if (selected !== null) return; // lock after first answer
-    setSelected(i);
-    if (shuffledChoices[i].isCorrect) setScore((s) => s + 1);
+    setAnswers((prev) => {
+      const next = [...prev];
+      next[index] = i;
+      return next;
+    });
+    // NOTE: deliberately no scoring, no correct/wrong reveal here —
+    // students find out everything at the end.
   }
 
   function next() {
     if (index + 1 >= questions.length) {
-      setDone(true);
+      finish();
       return;
     }
     setIndex((i) => i + 1);
-    setSelected(null);
+  }
+
+  /** Scores the run, records the attempt (device-local + Supabase, which
+   * assigns the authoritative attempt number), and builds the item review. */
+  async function finish() {
+    const items: ReviewItem[] = [];
+    let score = 0;
+    questions.forEach((prepared, qi) => {
+      const picked = answers[qi];
+      const isCorrect = picked !== null && prepared.shuffled[picked].isCorrect;
+      if (isCorrect) score++;
+      items.push({
+        label: `Item ${qi + 1}`,
+        prompt: prepared.q.prompt,
+        yourAnswer: picked === null ? "No answer" : prepared.shuffled[picked].text,
+        correctAnswer: prepared.correctText,
+        isCorrect,
+      });
+    });
+
+    const secs = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
+    setDurationSec(secs);
+    setReview(items);
+
+    let summary: AttemptSummary | null = null;
+    if (attemptContext) {
+      summary = await saveCompletedAttempt(attemptContext, {
+        durationSec: secs,
+        score,
+        total: questions.length,
+        game: "quiz",
+        details: items,
+      });
+    } else if (attemptNumber > 0) {
+      summary = { attemptNumber, totalAttempts: attemptNumber };
+    }
+    setAttemptSummary(summary);
+
+    setDone(true);
   }
 
   function restart() {
     setIndex(0);
-    setSelected(null);
-    setScore(0);
+    setAnswers(questions.map(() => null));
     setDone(false);
+    setAttemptSummary(null);
+    setReview([]);
+    setDurationSec(0);
+    setRunId((r) => r + 1);
+    if (attemptContext) {
+      setAttemptNumber(getNextAttemptNumber(attemptContext));
+    } else if (attemptNumber > 0) {
+      setAttemptNumber((n) => n + 1);
+    }
   }
 
   if (done) {
     return (
-      <ResultsScreen
-        score={score}
+      <QuizResults
+        score={countScore(review)}
         total={questions.length}
-        onRestart={restart}
+        review={review}
+        durationSec={durationSec}
+        attemptSummary={attemptSummary ?? undefined}
+        retakeLabel={attemptContext ? `Take it again · Attempt #${attemptNumber + 1}` : "Play again"}
+        onRetake={restart}
         onExit={onExit}
       />
     );
@@ -65,27 +191,34 @@ export default function QuizGame({ bank, onExit }: { bank: QuestionBank; onExit:
 
   return (
     <div className="max-w-xl mx-auto">
-      <GameHeader title="Quiz" progress={`${index + 1} / ${questions.length}`} onExit={onExit} />
+      <GameHeader
+        key={runId}
+        title="Quiz"
+        progress={`${index + 1} / ${questions.length}`}
+        attemptLabel={attemptNumber > 0 ? `Attempt #${attemptNumber}` : undefined}
+        onExit={onExit}
+      />
 
       <div className="mt-6 bg-white border border-zinc-200 rounded-3xl p-8 shadow-sm">
-        <p className="text-2xl font-bold text-[var(--foreground)] leading-snug">{current.prompt}</p>
+        <p className="text-2xl font-bold text-[var(--foreground)] leading-snug">{current.q.prompt}</p>
 
         <div className="mt-6 grid gap-3">
-          {shuffledChoices.map((c, i) => {
+          {current.shuffled.map((c, i) => {
             const isSelected = selected === i;
-            const revealCorrect = selected !== null && c.isCorrect;
-            const revealWrong = selected !== null && isSelected && !c.isCorrect;
+            const answered = selected !== null;
             return (
               <button
                 key={i}
                 onClick={() => choose(i)}
-                disabled={selected !== null}
+                disabled={answered}
                 className={[
                   "text-left px-5 py-4 rounded-2xl border-2 text-lg font-semibold transition-all",
-                  revealCorrect ? "bg-correct-bg border-correct text-correct stamp-pop" : "",
-                  revealWrong ? "bg-incorrect-bg border-incorrect text-incorrect" : "",
-                  selected === null ? "border-zinc-200 bg-white text-[var(--foreground)] hover:border-brand hover:bg-brand-light active:scale-[0.98] cursor-pointer" : "",
-                  selected !== null && !revealCorrect && !revealWrong ? "border-zinc-100 bg-white text-zinc-400" : "",
+                  isSelected
+                    // Neutral "your pick" styling — deliberately reveals
+                    // nothing about correctness.
+                    ? "border-brand bg-brand-light text-brand-dark"
+                    : "border-zinc-200 bg-white text-[var(--foreground)]",
+                  !answered ? "hover:border-brand hover:bg-brand-light active:scale-[0.98] cursor-pointer" : "",
                 ].join(" ")}
               >
                 {c.text}
@@ -102,20 +235,33 @@ export default function QuizGame({ bank, onExit }: { bank: QuestionBank; onExit:
             {index + 1 >= questions.length ? "See results" : "Next question"}
           </button>
         )}
+
+        <p className="mt-4 text-xs text-zinc-400">
+          Answers stay hidden until you finish — you&rsquo;ll get a full review at the end.
+        </p>
       </div>
     </div>
   );
 }
 
+function countScore(review: ReviewItem[]): number {
+  return review.filter((r) => r.isCorrect).length;
+}
+
 export function GameHeader({
   title,
   progress,
+  attemptLabel,
   onExit,
 }: {
   title: string;
   progress?: string;
+  /** Optional gold chip, e.g. "Attempt #2" — shown on shared student links. */
+  attemptLabel?: string;
   onExit: () => void;
 }) {
+  // GameHeader is mounted with key={runId} by the games, so a retake fully
+  // remounts it and the timer restarts from 0:00 for the new attempt.
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -136,6 +282,11 @@ export function GameHeader({
         <h2 className="text-3xl font-extrabold text-[var(--foreground)] mt-1 tracking-tight">{title}</h2>
       </div>
       <div className="flex items-center gap-2">
+        {attemptLabel && (
+          <span className="text-sm font-bold bg-gold/15 text-gold-dark px-3 py-1.5 rounded-full whitespace-nowrap">
+            🔁 {attemptLabel}
+          </span>
+        )}
         <span className="text-sm font-bold font-mono bg-white/80 text-[var(--foreground)] px-3 py-1.5 rounded-full border border-zinc-200">
           ⏱ {mins}:{secs.toString().padStart(2, "0")}
         </span>
@@ -160,7 +311,7 @@ export function ResultsScreen({
   onRestart: () => void;
   onExit: () => void;
 }) {
-  const pct = Math.round((score / total) * 100);
+  const pct = total > 0 ? Math.round((score / total) * 100) : 0;
   const cheer = pct === 100 ? "Perfect score!" : pct >= 80 ? "Great work!" : pct >= 50 ? "Good effort!" : "Keep practicing!";
   return (
     <div className="max-w-xl mx-auto text-center bg-white border border-zinc-200 rounded-3xl p-10 shadow-sm relative overflow-hidden">

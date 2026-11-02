@@ -16,6 +16,12 @@ export function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+/** True or false, 50/50 — kept here so game templates can stay lint-clean
+ * (direct Math.random() calls inside components trip react-hooks/purity). */
+export function coinFlip(): boolean {
+  return Math.random() < 0.5;
+}
+
 /** A short display label + longer detail for any question type — used by
  * templates (Open the Box, Spin the Wheel) that just need "what's in here"
  * rather than an interactive quiz flow. */
