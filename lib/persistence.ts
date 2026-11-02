@@ -118,6 +118,17 @@ export async function deleteBank(code: string): Promise<void> {
 // Student attempts (teacher dashboard)
 // ---------------------------------------------------------------------------
 
+/** Thrown when the Supabase project hasn't had the (current)
+ * supabase/schema.sql run yet — the quiz_attempts table doesn't exist.
+ * The dashboard turns this into a friendly setup checklist instead of a
+ * raw Postgres error. */
+export class SetupRequiredError extends Error {
+  constructor() {
+    super("The results table (quiz_attempts) doesn't exist in your Supabase project yet.");
+    this.name = "SetupRequiredError";
+  }
+}
+
 /** One recorded attempt, as stored in Supabase. `details` carries the
  * per-item review the student saw on their results screen. */
 export interface AttemptRow {
@@ -125,6 +136,7 @@ export interface AttemptRow {
   shareCode: string;
   studentName: string;
   studentKey: string;
+  studentEmail: string;
   studentSection: string;
   game: string;
   attemptNumber: number;
@@ -152,11 +164,17 @@ export async function listAttemptsForMyQuizzes(): Promise<AttemptRow[]> {
   const { data, error } = await supabase
     .from("quiz_attempts")
     .select(
-      "id, share_code, student_name, student_key, student_section, game, attempt_number, score, total, duration_sec, details, finished_at"
+      "id, share_code, student_name, student_key, student_email, student_section, game, attempt_number, score, total, duration_sec, details, finished_at"
     )
     .order("finished_at", { ascending: false });
 
   if (error) {
+    // PostgREST's "table missing" error (PGRST205 — "Could not find the
+    // table 'public.quiz_attempts' in the schema cache") means the setup
+    // SQL hasn't been run; surface that as an actionable setup step.
+    if (error.code === "PGRST205" || /schema cache|could not find the table/i.test(error.message)) {
+      throw new SetupRequiredError();
+    }
     throw new Error(`Couldn't load student attempts: ${error.message}`);
   }
   return (data ?? []).map((row) => ({
@@ -164,6 +182,7 @@ export async function listAttemptsForMyQuizzes(): Promise<AttemptRow[]> {
     shareCode: row.share_code,
     studentName: row.student_name,
     studentKey: row.student_key,
+    studentEmail: row.student_email ?? "",
     studentSection: row.student_section ?? "",
     game: row.game,
     attemptNumber: row.attempt_number,

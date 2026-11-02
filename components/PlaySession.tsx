@@ -3,15 +3,17 @@
 // components/PlaySession.tsx
 // Routes a loaded question bank into a game template (or the picker).
 //
-// Student-link extras: when shareCode + studentName are provided (only
-// /play/[code] does this, after the student signed in), the session
-//  - shows the signed-in StudentBar with a "Switch user" action,
+// Student-link extras: when shareCode + student are provided (only
+// /play/[code] does this, after the student signed in with their Google
+// account), the session
+//  - shows the signed-in StudentBar with a "Sign out" action,
 //  - prompts "Attempt #N" on the intro of every attempt-tracked format
 //    (Quiz, True or False, and the arcade games: Whack-a-Mole, Flying
 //    Fruit, Airplane, Maze Chase), and
 //  - hands each game an attemptContext so completed runs are recorded
-//    (device-local + Supabase) and the results screen can show time
-//    taken + attempt numbering + the item review.
+//    (device-local + Supabase, under the verified Google identity) and
+//    the results screen can show time taken + attempt numbering + the
+//    item review.
 
 import { ReactNode, useMemo, useState } from "react";
 import { QuestionBank } from "@/lib/schema";
@@ -31,7 +33,7 @@ export default function PlaySession({
   allowSharing = false,
   onCreateCustom,
   student,
-  onSwitchUser,
+  onSignOut,
   shareCode,
 }: {
   bank: QuestionBank;
@@ -53,7 +55,9 @@ export default function PlaySession({
   /** Signed-in student on a shared link — shows the StudentBar and enables
    * attempt tracking. Omit for the teacher's own session. */
   student?: StudentSession | null;
-  onSwitchUser?: () => void;
+  /** Ends the student's Supabase session — the next student on a shared
+   * device signs in with their own Google account. */
+  onSignOut?: () => void;
   /** The /play/[code] share code — attempt history is keyed by it. */
   shareCode?: string;
 }) {
@@ -64,12 +68,15 @@ export default function PlaySession({
   // Memoized so the games can safely put attemptContext in effect deps —
   // it stays referentially stable across re-renders of this session.
   const attemptContext: AttemptContext | undefined = useMemo(
-    () => (shareCode && student ? { shareCode, studentName: student.name, studentSection: student.section } : undefined),
+    () =>
+      shareCode && student
+        ? { shareCode, studentId: student.id, studentName: student.name, studentSection: student.section }
+        : undefined,
     [shareCode, student]
   );
 
   const studentBar: ReactNode =
-    student && onSwitchUser ? <StudentBar student={student} onSwitchUser={onSwitchUser} /> : null;
+    student && onSignOut ? <StudentBar student={student} onSignOut={onSignOut} /> : null;
 
   if (templateId) {
     const template = TEMPLATES.find((t) => t.id === templateId);

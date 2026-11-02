@@ -1,14 +1,19 @@
 // lib/attempts.ts
 // Per-student, per-quiz attempt tracking for shared student links.
 //
+// Students are identified by their SIGNED-IN GOOGLE ACCOUNT (see
+// lib/studentAuth.ts) — attempts are keyed by the account's stable user id,
+// and the display name/email on each attempt come from the verified Google
+// profile. Nothing is typed by the student anymore.
+//
 // Attempts are recorded BOTH places:
-//  1. Supabase (authoritative) — via the record_attempt() RPC, which assigns
-//     the attempt number server-side and files the attempt under the quiz's
-//     owning teacher, so /dashboard can show every student's attempts.
+//  1. Supabase (authoritative) — via the record_attempt() RPC, which reads
+//     the identity server-side from the signed-in session, assigns the
+//     attempt number, and files the attempt under the quiz's owning
+//     teacher, so /dashboard can show every student's attempts.
 //  2. The student's device (localStorage, keyed by the share code + the
-//     signed-in student's name — see lib/studentAuth.ts) — a fallback that
-//     keeps attempt numbering working when the network hiccups right at
-//     the end of a run.
+//     signed-in account's id) — a fallback that keeps attempt numbering
+//     working when the network hiccups right at the end of a run.
 //
 // Every COMPLETED run of an attempt-tracked game records one attempt;
 // abandoned runs don't count.
@@ -44,9 +49,14 @@ export const ATTEMPT_TRACKED_TEMPLATES = new Set([
 export interface AttemptContext {
   /** The shared quiz's code from /play/[code]. */
   shareCode: string;
-  /** The signed-in student's display name. */
+  /** The signed-in Google account's Supabase user id — attempts are keyed
+   * by it locally; on the server the identity is re-derived from the
+   * session, so this id is never trusted for attribution. */
+  studentId: string;
+  /** Display name from the verified Google profile — for the results
+   * screen's greeting only. */
   studentName: string;
-  /** The section they optionally entered at sign-in — shown on the
+  /** The section they optionally typed at the sign-in gate — shown on the
    * teacher dashboard to tell classes apart. */
   studentSection?: string;
 }
@@ -113,51 +123,47 @@ function readBlob(key: string): Record<string, number | AttemptRecord[]> {
   }
 }
 
-function studentKeyOf(name: string): string {
-  return name.trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-/** All recorded (device-local) attempts for this student on this quiz,
- * oldest first. Used for numbering fallback only — the dashboard reads
- * from Supabase, not from here. */
-export function getAttempts(shareCode: string, studentName: string): AttemptRecord[] {
+/** All recorded (device-local) attempts for this signed-in account on this
+ * quiz, oldest first. Used for numbering fallback only — the dashboard
+ * reads from Supabase, not from here. */
+export function getAttempts(shareCode: string, studentId: string): AttemptRecord[] {
   const blob = readBlob(attemptsKey(shareCode));
-  return (blob[studentKeyOf(studentName)] as AttemptRecord[]) ?? [];
+  return (blob[studentId] as AttemptRecord[]) ?? [];
 }
 
-function getLocalCount(shareCode: string, studentName: string): number {
-  return getAttempts(shareCode, studentName).length;
+function getLocalCount(shareCode: string, studentId: string): number {
+  return getAttempts(shareCode, studentId).length;
 }
 
-function getSyncedCount(shareCode: string, studentName: string): number {
+function getSyncedCount(shareCode: string, studentId: string): number {
   const blob = readBlob(syncKey(shareCode));
-  const n = blob[studentKeyOf(studentName)];
+  const n = blob[studentId];
   return typeof n === "number" && Number.isFinite(n) ? n : 0;
 }
 
-function setSyncedCount(shareCode: string, studentName: string, count: number): void {
+function setSyncedCount(shareCode: string, studentId: string, count: number): void {
   const key = syncKey(shareCode);
   const blob = readBlob(key);
-  blob[studentKeyOf(studentName)] = Math.max(0, Math.floor(count));
+  blob[studentId] = Math.max(0, Math.floor(count));
   window.localStorage.setItem(key, JSON.stringify(blob));
 }
 
 /** The number the NEXT run will be, from the best information on this
  * device right now (its own records + the last known server count). */
 export function getNextAttemptNumber(ctx: AttemptContext): number {
-  return Math.max(getLocalCount(ctx.shareCode, ctx.studentName), getSyncedCount(ctx.shareCode, ctx.studentName)) + 1;
+  return Math.max(getLocalCount(ctx.shareCode, ctx.studentId), getSyncedCount(ctx.shareCode, ctx.studentId)) + 1;
 }
 
 /** Refreshes the attempt number from the server — call once when the
  * intro/game mounts. Returns the refreshed number, or the local one when
- * the server can't be reached. Never throws. */
+ * the server can't be reached. Never throws. The server counts the
+ * signed-in account's own attempts (identity from the session). */
 export async function refreshAttemptNumber(ctx: AttemptContext): Promise<number> {
   const serverCount = await rpc<number>("count_student_attempts", {
     p_code: ctx.shareCode,
-    p_student_name: ctx.studentName,
   });
   if (typeof serverCount === "number" && Number.isFinite(serverCount)) {
-    setSyncedCount(ctx.shareCode, ctx.studentName, serverCount);
+    setSyncedCount(ctx.shareCode, ctx.studentId, serverCount);
   }
   return getNextAttemptNumber(ctx);
 }
@@ -173,15 +179,16 @@ export async function saveCompletedAttempt(
   data: { durationSec: number; score: number; total: number; game: string; details: AttemptDetailItem[] }
 ): Promise<AttemptSummary | null> {
   if (typeof window === "undefined") return null;
-  if (!studentKeyOf(ctx.studentName)) return null;
+  if (!ctx.studentId) return null;
 
   // 1) Local record (also seeds the fallback numbering for next time).
   const local = recordAttempt(ctx, data);
 
-  // 2) Server record — its attempt number wins when it arrives.
+  // 2) Server record — its attempt number wins when it arrives. The name
+  //    is NOT sent: the server reads the verified identity from the
+  //    signed-in Google session, so it can't be spoofed from here.
   const serverNumber = await rpc<number>("record_attempt", {
     p_code: ctx.shareCode,
-    p_student_name: ctx.studentName,
     p_section: ctx.studentSection ?? "",
     p_game: data.game,
     p_score: data.score,
@@ -199,7 +206,7 @@ export async function saveCompletedAttempt(
 
   // Remember the authoritative count so the next intro badge continues
   // from it even before the server is asked again.
-  setSyncedCount(ctx.shareCode, ctx.studentName, attemptNumber);
+  setSyncedCount(ctx.shareCode, ctx.studentId, attemptNumber);
 
   return { attemptNumber, totalAttempts: attemptNumber };
 }
@@ -212,7 +219,7 @@ export function recordAttempt(
   data: { durationSec: number; score: number; total: number; game: string }
 ): AttemptRecord | null {
   if (typeof window === "undefined") return null;
-  const key = studentKeyOf(ctx.studentName);
+  const key = ctx.studentId;
   if (!key) return null;
   const blob = readBlob(attemptsKey(ctx.shareCode)) as AttemptsBlob;
   const list = blob[key] ?? [];
@@ -237,16 +244,24 @@ export function formatDuration(totalSec: number): string {
 
 /** Supabase RPC wrapper that fails soft: any error, timeout, or
  * unconfigured backend resolves to null and callers fall back to the
- * device-local copy. */
+ * device-local copy. Failures are logged so a teacher diagnosing "why
+ * doesn't this attempt show on my dashboard?" has something to go on. */
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T | null> {
   if (typeof window === "undefined" || !isSupabaseConfigured) return null;
   try {
     const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), SERVER_TIMEOUT_MS));
     const call = getSupabaseClient()
       .rpc(fn, args)
-      .then(({ data, error }) => (error ? null : ((data as T) ?? null)));
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn(`[attempts] ${fn} failed:`, error.message);
+          return null;
+        }
+        return (data as T) ?? null;
+      });
     return await Promise.race([call, timeout]);
-  } catch {
+  } catch (e) {
+    console.warn(`[attempts] ${fn} threw:`, e);
     return null;
   }
 }

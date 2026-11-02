@@ -2,36 +2,74 @@
 
 // components/StudentGate.tsx
 // The sign-in gate shown to students who open a teacher's shared quiz link
-// (/play/[code]). Nobody gets to the quiz until they've signed in with
-// their name — that's what their attempts and results are tied to (see
-// lib/attempts.ts). No email/password by design: this is a classroom, not
-// a bank. If the device was used by a classmate before, "Switch user" on
-// the bar above the quiz swaps accounts.
+// (/play/[code]). Nobody sees quiz content until they've signed in with
+// their own Google account (via Supabase Auth) — the name recorded on
+// every attempt comes from that verified account, so a student can't
+// preview the answers under a made-up name first. The only thing still
+// typed here is the optional Section / Grade, which is remembered before
+// the redirect and attached to their account after they come back.
 
 import { FormEvent, useState } from "react";
 import { BRAND_NAME } from "@/lib/brand";
+import { savePendingSection, signInWithGoogle } from "@/lib/studentAuth";
+
+/** The official four-color Google "G". */
+function GoogleG({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden className="shrink-0">
+      <path
+        fill="#4285F4"
+        d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.57 5.57 0 0 1-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09A11.99 11.99 0 0 0 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.27 14.29A7.2 7.2 0 0 1 4.89 12c0-.8.14-1.57.38-2.29V6.62H1.29a12 12 0 0 0 0 10.76l3.98-3.09z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"
+      />
+    </svg>
+  );
+}
 
 export default function StudentGate({
   quizTitle,
   questionCount,
-  onSignIn,
+  shareCode,
+  notice,
 }: {
   quizTitle: string;
   questionCount?: number;
-  onSignIn: (name: string, section: string) => void;
+  shareCode: string;
+  /** Shown above the form — e.g. a failed or cancelled sign-in attempt. */
+  notice?: string | null;
 }) {
-  const [name, setName] = useState("");
   const [section, setSection] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleGoogle(e: FormEvent) {
     e.preventDefault();
-    if (name.trim().length < 2) {
-      setError("Please enter your full name (at least 2 characters).");
-      return;
-    }
     setError(null);
-    onSignIn(name, section);
+    setRedirecting(true);
+    try {
+      // Remember the optional section now — the Google redirect reloads
+      // the page and it gets bound to the account on the way back.
+      savePendingSection(shareCode, section);
+      await signInWithGoogle(`${window.location.origin}/play/${shareCode}`);
+      // Success navigates away to Google's consent screen; if we're still
+      // here something blocked the navigation.
+      setError("Sign-in didn't start. Check your internet connection and try again.");
+      setRedirecting(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
+      setRedirecting(false);
+    }
   }
 
   return (
@@ -51,24 +89,16 @@ export default function StudentGate({
             {typeof questionCount === "number" && questionCount > 0 && (
               <> · {questionCount} question{questionCount === 1 ? "" : "s"}</>
             )}
-            . Sign in with your name so your attempts and results are recorded.
+            . Sign in with your Google account so your attempts are recorded under your real name.
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-3">
-            <div>
-              <label htmlFor="student-name" className="block text-sm font-bold text-[var(--foreground)] mb-1">
-                Full name <span className="text-incorrect">*</span>
-              </label>
-              <input
-                id="student-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Juan Dela Cruz"
-                autoComplete="off"
-                className="w-full border-2 border-zinc-200 rounded-xl p-3 text-sm bg-white text-zinc-900 placeholder:text-zinc-400 focus:border-brand focus:outline-none transition-colors"
-              />
-            </div>
+          {notice && (
+            <p className="mt-5 text-sm font-medium text-gold-dark bg-gold/15 border border-gold/40 rounded-xl px-4 py-3">
+              {notice}
+            </p>
+          )}
+
+          <form onSubmit={handleGoogle} className="mt-6 space-y-3">
             <div>
               <label htmlFor="student-section" className="block text-sm font-bold text-[var(--foreground)] mb-1">
                 Section / Grade <span className="text-zinc-400 font-medium">(optional)</span>
@@ -88,15 +118,29 @@ export default function StudentGate({
 
             <button
               type="submit"
-              className="w-full bg-brand text-white rounded-xl px-4 py-3.5 font-bold text-base hover:bg-brand-dark active:scale-[0.98] transition-all cursor-pointer shadow-sm"
+              disabled={redirecting}
+              className="w-full bg-white text-zinc-800 rounded-xl px-4 py-3.5 font-bold text-base border-2 border-zinc-300 hover:bg-zinc-50 hover:border-zinc-400 active:scale-[0.98] transition-all cursor-pointer shadow-sm flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-wait"
             >
-              Sign in &amp; start
+              {redirecting ? (
+                <>
+                  <span
+                    className="inline-block w-4 h-4 border-2 border-zinc-300 border-t-zinc-600 rounded-full animate-spin"
+                    aria-hidden
+                  />
+                  Opening Google…
+                </>
+              ) : (
+                <>
+                  <GoogleG />
+                  Continue with Google
+                </>
+              )}
             </button>
           </form>
 
           <p className="text-xs text-zinc-400 mt-4 text-center">
-            Answers are hidden while you work — you&rsquo;ll see your full results, time, and attempt
-            number when you finish.
+            Only your name, email, and quiz results are shared with your teacher. Answers stay hidden while you work —
+            you&rsquo;ll see your full results, time, and attempt number when you finish.
           </p>
         </div>
       </div>

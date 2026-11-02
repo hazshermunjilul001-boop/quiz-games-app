@@ -1,95 +1,178 @@
 // lib/studentAuth.ts
-// Lightweight student sign-in for shared quiz links (/play/[code]).
+// Student sign-in for shared quiz links (/play/[code]).
 //
-// This is deliberately NOT the teacher Supabase account system — students
-// never need an email or password. They sign in with their name (and an
-// optional section), which is stored on their device in localStorage.
-// Everything that needs to be per-student (attempt counts, etc., see
-// lib/attempts.ts) is keyed by that name, so on a shared device each
-// student can "Switch user" and keep their own history.
+// Students sign in with their OWN Google account through Supabase Auth
+// (Supabase dashboard → Authentication → Providers → Google). The name and
+// email on every attempt come from that verified Google profile — they can
+// no longer be typed freely, so a student can't peek at the answers under a
+// dummy name before taking the quiz under their real one.
+//
+// The session is a real Supabase session (http-only cookie + refresh token
+// in the browser) — the same one a teacher account uses — so "Sign out" on
+// a shared classroom device genuinely ends it for the next student.
+//
+// The optional Section / Grade field is the only thing still typed by the
+// student. It's saved BEFORE the redirect to Google (the page reloads on
+// the way back), then bound to the signed-in user's id after the redirect —
+// see consumePendingSection().
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
-
-const STORAGE_KEY = "quizcade:student-session";
-/** Fired on the writing tab after signIn/switchUser (the browser's own
- * "storage" event only reaches OTHER tabs, not the one that wrote). */
-const CHANGE_EVENT = "quizcade:student-session-changed";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { getSupabaseClient, isSupabaseConfigured } from "./supabaseClient";
 
 export interface StudentSession {
+  /** Supabase auth user id — the stable identity attempts are keyed by. */
+  id: string;
+  /** Display name from the verified Google profile (email prefix fallback). */
   name: string;
+  /** The Google account's email — lets students spot the wrong account. */
+  email: string;
+  /** Optional section/grade typed at the gate before the Google hand-off. */
   section: string;
-  signedInAt: string; // ISO timestamp
+  /** Google profile photo, when available. */
+  avatarUrl?: string;
 }
 
-/** Canonical key for a student name: trimmed, lowercased, collapsed
- * whitespace — so "Juan Dela Cruz" and "juan   dela cruz" share history. */
-export function studentKey(name: string): string {
-  return name.trim().replace(/\s+/g, " ").toLowerCase();
-}
+const sectionKey = (userId: string) => `quizcade:student-section:${userId}`;
+const pendingKey = (shareCode: string) => `quizcade:pending-section:${shareCode}`;
 
-function parseSession(raw: string | null): StudentSession | null {
-  if (!raw) return null;
+function readSection(userId: string): string {
+  if (typeof window === "undefined") return "";
   try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed.name !== "string" || !parsed.name.trim()) return null;
-    return {
-      name: parsed.name,
-      section: typeof parsed.section === "string" ? parsed.section : "",
-      signedInAt: typeof parsed.signedInAt === "string" ? parsed.signedInAt : new Date().toISOString(),
-    };
+    return window.localStorage.getItem(sectionKey(userId)) ?? "";
   } catch {
-    return null;
+    return "";
   }
 }
 
-function saveStudentSession(name: string, section: string): void {
-  const session: StudentSession = {
-    name: name.trim().replace(/\s+/g, " "),
-    section: section.trim(),
-    signedInAt: new Date().toISOString(),
+/** Remembered at the gate, before the OAuth redirect wipes the page. */
+export function savePendingSection(shareCode: string, section: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      pendingKey(shareCode),
+      JSON.stringify({ section: section.trim(), at: Date.now() })
+    );
+  } catch {
+    // Private browsing / storage full — the section is optional, carry on.
+  }
+}
+
+/** Called right after the Google redirect: binds the section the student
+ * typed at the gate to their now-known user id (so it sticks for their
+ * future attempts on this device) and returns the section to display. */
+export function consumePendingSection(shareCode: string, userId: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const existing = window.localStorage.getItem(sectionKey(userId)) ?? "";
+    const raw = window.localStorage.getItem(pendingKey(shareCode));
+    if (raw == null) return existing;
+    window.localStorage.removeItem(pendingKey(shareCode));
+    let section = existing;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.section === "string") section = parsed.section.trim();
+    } catch {
+      // Malformed pending value — fall back to whatever was saved before.
+    }
+    window.localStorage.setItem(sectionKey(userId), section);
+    return section;
+  } catch {
+    return "";
+  }
+}
+
+/** Builds the student session from the Supabase user — name and email come
+ * from the verified Google identity, never from typed input. */
+export function studentFromUser(user: User): StudentSession {
+  const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = meta[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
   };
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+  const email = (user.email ?? pick("email")).trim();
+  const name = pick("full_name", "name") || email.split("@")[0] || "Google user";
+  const avatarUrl = pick("avatar_url", "picture") || undefined;
+  return { id: user.id, name, email, section: readSection(user.id), avatarUrl };
 }
 
-function clearStudentSession(): void {
-  window.localStorage.removeItem(STORAGE_KEY);
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+/** Starts the Google OAuth flow. The browser is redirected to Google's
+ * consent screen and comes back to `redirectTo` (the same /play/[code]
+ * link, so the student lands exactly where they started). */
+export async function signInWithGoogle(redirectTo: string): Promise<void> {
+  const supabase = getSupabaseClient();
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+  if (error) throw new Error(friendlyAuthError(error.message));
 }
 
-function subscribe(callback: () => void): () => void {
-  window.addEventListener("storage", callback);
-  window.addEventListener(CHANGE_EVENT, callback);
-  return () => {
-    window.removeEventListener("storage", callback);
-    window.removeEventListener(CHANGE_EVENT, callback);
-  };
+export async function signOutStudent(): Promise<void> {
+  const supabase = getSupabaseClient();
+  await supabase.auth.signOut();
 }
 
-/** Reactive hook for the signed-in student, backed by localStorage via
- * useSyncExternalStore — no hydration-time effects, and it even stays in
- * sync across tabs. Returns null when signed out (or while server
- * rendering; the shared-link page only renders the gate after the quiz
- * has loaded client-side, so there's never a server-rendered gate). */
-export function useStudent(): {
-  student: StudentSession | null;
-  signIn: (name: string, section: string) => void;
-  switchUser: () => void;
-} {
-  const raw = useSyncExternalStore(
-    subscribe,
-    () => window.localStorage.getItem(STORAGE_KEY),
-    () => null
-  );
-  const student = useMemo(() => parseSession(raw), [raw]);
+/** Turns raw Supabase auth errors into messages that tell the TEACHER what
+ * to fix — a student can't toggle provider settings. */
+export function friendlyAuthError(message: string): string {
+  if (/unsupported provider|provider is not enabled|validation failed/i.test(message)) {
+    return "Google sign-in isn't enabled on this app's backend yet. Teacher: open Supabase → Authentication → Sign In / Providers → Google, turn it on, and add your Google OAuth Client ID and Secret — the step-by-step walkthrough is in UPDATE-NOTES.md.";
+  }
+  if (/redirect/i.test(message) && /not allowed|allow ?list/i.test(message)) {
+    return "This site's address isn't on the sign-in allowlist yet. Teacher: in Supabase → Authentication → URL Configuration → Redirect URLs, add this site's URL (see UPDATE-NOTES.md).";
+  }
+  return message;
+}
 
-  const signIn = useCallback((name: string, section: string) => {
-    saveStudentSession(name, section);
+/** Reactive signed-in student. `loading` is true while the session is being
+ * restored (including right after coming back from Google) — the play page
+ * waits for it so a signed-in student never sees the gate flash.
+ *
+ * Pass the share code to bind the optional section typed at the gate: right
+ * after the Google redirect the pending section is attached to the now-known
+ * account (and re-read from storage for returning students). */
+export function useStudent(shareCode?: string): { student: StudentSession | null; loading: boolean } {
+  const [state, setState] = useState<{ loaded: boolean; user: User | null }>({
+    loaded: !isSupabaseConfigured,
+    user: null,
+  });
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const supabase = getSupabaseClient();
+    let mounted = true;
+
+    const apply = (user: User | null) => {
+      if (!mounted) return;
+      setState({ loaded: true, user });
+    };
+
+    supabase.auth.getUser().then(({ data }) => apply(data.user ?? null));
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      apply(session?.user ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
-  const switchUser = useCallback(() => {
-    clearStudentSession();
-  }, []);
+  const student = useMemo(() => {
+    if (!state.user) return null;
+    const s = studentFromUser(state.user);
+    if (shareCode) {
+      // Consumes (and clears) the section typed at the gate. Idempotent:
+      // once bound, it reads the stored value for this account.
+      s.section = consumePendingSection(shareCode, state.user.id);
+    }
+    return s;
+  }, [state.user, shareCode]);
 
-  return { student, signIn, switchUser };
+  return { student, loading: !state.loaded };
 }

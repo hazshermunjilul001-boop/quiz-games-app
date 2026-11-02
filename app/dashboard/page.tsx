@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/lib/auth";
-import { listMyBanks, listAttemptsForMyQuizzes, AttemptRow, SavedActivity } from "@/lib/persistence";
+import { listMyBanks, listAttemptsForMyQuizzes, AttemptRow, SavedActivity, SetupRequiredError } from "@/lib/persistence";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { formatDuration } from "@/lib/attempts";
 
@@ -46,6 +46,7 @@ function shortDate(iso: string): string {
 interface StudentGroup {
   key: string;
   name: string;
+  email: string;
   section: string;
   attempts: AttemptRow[]; // newest first
   bestPct: number;
@@ -56,11 +57,12 @@ function groupByStudent(attempts: AttemptRow[]): StudentGroup[] {
   for (const a of attempts) {
     let g = map.get(a.studentKey);
     if (!g) {
-      g = { key: a.studentKey, name: a.studentName, section: a.studentSection, attempts: [], bestPct: 0 };
+      g = { key: a.studentKey, name: a.studentName, email: a.studentEmail, section: a.studentSection, attempts: [], bestPct: 0 };
       map.set(a.studentKey, g);
     }
-    // Keep the most recent display name the student signed in with.
+    // Keep the most recent display identity the account signed in with.
     if (a.studentName.length >= g.name.length) g.name = a.studentName;
+    if (a.studentEmail) g.email = a.studentEmail;
     if (a.studentSection) g.section = a.studentSection;
     g.attempts.push(a);
     g.bestPct = Math.max(g.bestPct, pct(a.score, a.total));
@@ -76,6 +78,7 @@ export default function DashboardPage() {
   const [activities, setActivities] = useState<SavedActivity[] | null>(null);
   const [attempts, setAttempts] = useState<AttemptRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [setupNeeded, setSetupNeeded] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   /** Which quiz cards / students / attempts are expanded. */
@@ -92,7 +95,11 @@ export default function DashboardPage() {
       setActivities(banks);
       setAttempts(rows);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't load the results.");
+      if (e instanceof SetupRequiredError) {
+        setSetupNeeded(true);
+      } else {
+        setError(e instanceof Error ? e.message : "Couldn't load the results.");
+      }
     } finally {
       setLoadingData(false);
     }
@@ -186,7 +193,8 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-extrabold text-[var(--foreground)] tracking-tight">Student Results</h1>
           <p className="text-zinc-600 mt-2 text-base">
             Every attempt your students completed on your share links — scores, time taken, and which items they got
-            right or wrong.
+            right or wrong. Students sign in with their Google account, so every result is tied to a real, verified
+            identity (name + email).
           </p>
         </div>
         <button
@@ -201,6 +209,34 @@ export default function DashboardPage() {
       {error && (
         <div className="mt-4 bg-incorrect-bg border-2 border-incorrect/30 text-incorrect text-sm font-medium rounded-xl p-4">
           {error}
+        </div>
+      )}
+
+      {setupNeeded && (
+        <div className="mt-4 bg-gold/10 border-2 border-gold/40 rounded-2xl p-5">
+          <p className="font-bold text-gold-dark">One-time setup needed: the results table isn&rsquo;t created yet</p>
+          <p className="text-sm text-zinc-600 mt-2">
+            Student attempts are stored in a <code className="font-mono text-xs bg-white border border-zinc-200 rounded px-1">quiz_attempts</code> table
+            in your Supabase project, which doesn&rsquo;t exist there yet. Two minutes to fix:
+          </p>
+          <ol className="list-decimal list-inside text-sm text-zinc-700 mt-3 space-y-1.5">
+            <li>
+              Open your Supabase project &rarr; <strong>SQL Editor</strong> &rarr; New query.
+            </li>
+            <li>
+              Copy the <strong>full contents</strong> of <code className="font-mono text-xs bg-white border border-zinc-200 rounded px-1">supabase/schema.sql</code> from
+              this project, paste, and click <strong>Run</strong>.
+            </li>
+            <li>Come back here and click Refresh below.</li>
+          </ol>
+          <p className="text-xs text-zinc-400 mt-3">It&rsquo;s safe to run that file even if you&rsquo;ve run an older version of it before.</p>
+          <button
+            onClick={loadData}
+            disabled={loadingData}
+            className="mt-4 bg-brand text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-brand-dark active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+          >
+            {loadingData ? "Refreshing…" : "↻ I&rsquo;ve run the SQL — refresh"}
+          </button>
         </div>
       )}
 
@@ -323,13 +359,16 @@ export default function DashboardPage() {
                             onClick={() => toggle(openStudents, setOpenStudents, sKey)}
                             className="w-full text-left px-4 py-3 flex items-center justify-between gap-3 flex-wrap hover:bg-zinc-50 transition-colors cursor-pointer"
                           >
-                            <div className="min-w-0 flex items-center gap-2">
-                              <span className="font-bold text-[var(--foreground)] truncate">{s.name}</span>
-                              {s.section && (
-                                <span className="text-xs font-bold bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                  {s.section}
-                                </span>
-                              )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-[var(--foreground)] truncate">{s.name}</span>
+                                {s.section && (
+                                  <span className="text-xs font-bold bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                    {s.section}
+                                  </span>
+                                )}
+                              </div>
+                              {s.email && <p className="text-xs text-zinc-400 truncate">{s.email}</p>}
                             </div>
                             <div className="flex items-center gap-2 text-sm shrink-0 flex-wrap">
                               <span className="font-mono font-bold text-zinc-500">{s.attempts.length}×</span>

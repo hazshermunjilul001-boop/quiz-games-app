@@ -43,6 +43,11 @@ alter table question_banks enable row level security;
 -- since both changes touch the same policies anyway.
 drop policy if exists "anyone can read a quiz by its code" on question_banks;
 drop policy if exists "anyone can insert a quiz" on question_banks;
+-- (Postgres has no "create or replace policy", so drop-then-create keeps
+-- this whole file safe to re-run on a database that already has these.)
+drop policy if exists "insert own or anonymous quiz" on question_banks;
+drop policy if exists "owner can list their own quizzes" on question_banks;
+drop policy if exists "owner can delete their own quizzes" on question_banks;
 
 -- Anonymous saves are still allowed (user_id left null), and a signed-in
 -- teacher can only insert rows owned by themselves — never spoofing
@@ -81,6 +86,16 @@ as $$
   select * from question_banks where code = p_code;
 $$;
 
+-- PostgREST only serves what the anon/authenticated roles can access —
+-- and some projects end up missing these grants (which shows up as
+-- "Could not find the table ... in the schema cache"). State them
+-- explicitly so the API always matches the policies above:
+--   anon: insert only (anonymous "save & share"), everything else via
+--         get_shared_quiz();
+--   authenticated: full DML on their own rows (RLS scopes it).
+grant insert on table question_banks to anon, authenticated;
+grant select, delete on table question_banks to authenticated;
+
 grant execute on function get_shared_quiz(text) to anon, authenticated;
 
 -- Optional: if this table grows large over time, periodically prune old
@@ -93,14 +108,20 @@ grant execute on function get_shared_quiz(text) to anon, authenticated;
 -- STUDENT ATTEMPTS (teacher dashboard)
 -- ============================================================================
 -- Every completed run of an attempt-tracked game (Quiz, True or False, and
--- the arcade games: Whack-a-Mole, Flying Fruit, Airplane, Maze Chase) on a
--- signed-in shared link is recorded here, so the teacher can see ALL
--- students' attempts from the /dashboard page — not just the ones that
--- happened to happen on the same device (that device-local copy still
--- exists in the student's localStorage as an offline fallback).
+-- the arcade games: Whack-a-Mole, Flying Fruit, Airplane, Maze Chase) is
+-- recorded here, so the teacher can see ALL students' attempts from the
+-- /dashboard page — not just the ones that happened on one device (the
+-- student's device still keeps a localStorage copy as an offline fallback).
+--
+-- Students sign in with their own GOOGLE ACCOUNT (Supabase Auth → Google
+-- provider). The identity on each attempt is read server-side from the
+-- signed-in session — the browser never sends a name — so attempts can't
+-- be made under a fake identity. student_key holds the auth user id;
+-- student_name / student_email are display copies from the verified
+-- Google profile.
 --
 -- Safe to run again on an existing database: everything below is
--- CREATE IF NOT EXISTS / CREATE OR REPLACE.
+-- CREATE IF NOT EXISTS / CREATE OR REPLACE / ADD COLUMN IF NOT EXISTS.
 
 create table if not exists quiz_attempts (
   id uuid primary key default gen_random_uuid(),
@@ -109,12 +130,16 @@ create table if not exists quiz_attempts (
   share_code text not null references question_banks(code) on delete cascade,
   -- Denormalized copy of the owning teacher's id so RLS never needs a join.
   user_id uuid not null references auth.users(id) on delete cascade,
-  -- Exactly as the student typed it at sign-in (display form).
+  -- Display name from the verified Google profile at the time of the run.
   student_name text not null,
-  -- Normalized identity for grouping/counting ("Juan Dela Cruz" and
-  -- "juan dela cruz" are the same student) — see record_attempt().
+  -- The signed-in student's auth user id — the stable identity attempts
+  -- are grouped and counted by.
   student_key text not null,
-  -- Optional section/class from the sign-in form ("" when not given).
+  -- The Google account's email (shown on the dashboard so the teacher can
+  -- verify exactly who took the quiz).
+  student_email text not null default '',
+  -- Optional section/class the student typed at the sign-in gate ('' when
+  -- not given).
   student_section text not null default '',
   -- Template id of the game the attempt was taken in ("quiz", "true-false",
   -- "whack-a-mole", "flying-fruit", "airplane", "maze-chase").
@@ -132,10 +157,18 @@ create table if not exists quiz_attempts (
   finished_at timestamptz not null default now()
 );
 
+-- Upgrade for databases created with the earlier (typed-name) version of
+-- this file: attempts now carry the account's email for verification.
+alter table quiz_attempts add column if not exists student_email text not null default '';
+
 create index if not exists quiz_attempts_owner_idx on quiz_attempts (user_id, finished_at desc);
 create index if not exists quiz_attempts_quiz_idx on quiz_attempts (share_code, student_key, attempt_number);
 
 alter table quiz_attempts enable row level security;
+
+-- The dashboard reads attempts as the signed-in teacher (RLS scopes the
+-- rows to their own); writes happen only through record_attempt() below.
+grant select on table quiz_attempts to authenticated;
 
 -- Supabase's default privileges grant DML on new tables to the anon and
 -- authenticated roles, but with RLS enabled and NO policies created for
@@ -151,17 +184,23 @@ create policy "owner can read their quizzes' attempts"
   to authenticated
   using (user_id = auth.uid());
 
--- Records one completed attempt. Called by the student's browser (anon) —
--- SECURITY DEFINER is what lets it write despite the deny-by-default
--- policies above. The client NEVER supplies the owner: it's looked up from
--- question_banks by share code, so an anon caller can only attach an
--- attempt to a quiz whose share code it already knows, and can never
--- spoof rows into another teacher's dashboard. The attempt number is also
--- assigned here (max existing + 1 per quiz+student), so it stays correct
--- even when the same student plays from several devices.
+-- The earlier name-based versions of these functions are removed — identity
+-- now comes from the signed-in Google account instead of a typed name.
+drop function if exists record_attempt(text, text, text, text, integer, integer, integer, jsonb);
+drop function if exists count_student_attempts(text, text);
+
+-- Records one completed attempt. Called by the student's browser right
+-- after they finish a game. The caller MUST be signed in with their Google
+-- account: the student's identity, name, and email are read server-side
+-- from their session (auth.uid() / auth.users), never from arguments, so
+-- an attempt can't be recorded under somebody else's name. The quiz owner
+-- is looked up from question_banks by share code, so an anon caller can
+-- only ever attach an attempt to a quiz whose share code it already knows.
+-- The attempt number is assigned here (max existing + 1 per quiz+student),
+-- so it stays correct even when the same student plays from several
+-- devices.
 create or replace function record_attempt(
   p_code text,
-  p_student_name text,
   p_section text,
   p_game text,
   p_score integer,
@@ -175,9 +214,17 @@ set search_path = public
 as $$
 declare
   v_owner uuid;
+  v_uid uuid;
   v_key text;
   v_number integer;
+  v_name text;
+  v_email text;
 begin
+  v_uid := auth.uid();
+  if v_uid is null then
+    raise exception 'Sign in with your Google account first';
+  end if;
+
   select user_id into v_owner from question_banks where code = p_code;
   if v_owner is null then
     -- Covers both a mistyped code and a quiz that was saved WITHOUT signing
@@ -186,19 +233,33 @@ begin
     raise exception 'Quiz not found, or it was saved without signing in';
   end if;
 
-  -- Keep this EXACTLY in sync with studentKey() in lib/studentAuth.ts:
-  -- trim, collapse internal whitespace, lowercase.
-  v_key := lower(regexp_replace(trim(p_student_name), '\s+', ' ', 'g'));
+  -- Display identity from the VERIFIED account: the Google profile name if
+  -- present, else the account email. (raw_user_meta_data is where Supabase
+  -- stores the Google profile fields like full_name / name.)
+  select
+    coalesce(
+      nullif(trim(u.raw_user_meta_data ->> 'full_name'), ''),
+      nullif(trim(u.raw_user_meta_data ->> 'name'), ''),
+      nullif(u.email, ''),
+      'Google user'
+    ),
+    coalesce(u.email, '')
+  into v_name, v_email
+  from auth.users u
+  where u.id = v_uid;
+
+  v_key := v_uid::text;
 
   select coalesce(max(attempt_number), 0) + 1 into v_number
   from quiz_attempts
   where share_code = p_code and student_key = v_key;
 
   insert into quiz_attempts
-    (share_code, user_id, student_name, student_key, student_section,
-     game, attempt_number, score, total, duration_sec, details)
+    (share_code, user_id, student_name, student_key, student_email,
+     student_section, game, attempt_number, score, total, duration_sec, details)
   values
-    (p_code, v_owner, trim(p_student_name), v_key, coalesce(trim(p_section), ''),
+    (p_code, v_owner, v_name, v_key, v_email,
+     coalesce(trim(p_section), ''),
      p_game, v_number, p_score, p_total, p_duration_sec,
      coalesce(p_details, '[]'::jsonb));
 
@@ -206,24 +267,23 @@ begin
 end;
 $$;
 
-grant execute on function record_attempt(text, text, text, text, integer, integer, integer, jsonb)
+grant execute on function record_attempt(text, text, text, integer, integer, integer, jsonb)
   to anon, authenticated;
 
--- How many attempts a given student has already completed on a quiz — the
--- "Attempt #N" number shown on the intro screen BEFORE the run starts
--- (after the run, record_attempt() returns the authoritative number).
--- Returns only a count: no other student's answers can be read through it.
-create or replace function count_student_attempts(
-  p_code text,
-  p_student_name text
-) returns integer
+-- How many attempts the SIGNED-IN student has already completed on this
+-- quiz — the "Attempt #N" prompt shown on the intro screen BEFORE the run
+-- starts (after the run, record_attempt() returns the authoritative
+-- number). Reads only a count for the caller's own identity; nobody
+-- else's data is reachable through it.
+create or replace function count_student_attempts(p_code text)
+returns integer
 language sql
 security definer
 set search_path = public
 as $$
   select count(*)::int from quiz_attempts
   where share_code = p_code
-    and student_key = lower(regexp_replace(trim(p_student_name), '\s+', ' ', 'g'));
+    and student_key = auth.uid()::text;
 $$;
 
-grant execute on function count_student_attempts(text, text) to anon, authenticated;
+grant execute on function count_student_attempts(text) to anon, authenticated;
