@@ -107,6 +107,23 @@ function docxHtmlToStructuredText(html: string): ExtractedFile {
     if (el.tagName === "TABLE") {
       for (const row of Array.from(el.querySelectorAll("tr"))) {
         const cells = Array.from(row.querySelectorAll("td,th"));
+        const choiceCells = cells
+          .map((cell) => ({ cell, choiceIndex: choiceIndexIn((cell.textContent ?? "").trim()) }))
+          .filter((entry) => entry.choiceIndex !== undefined && entry.cell.querySelector("img"));
+
+        // Diagram choices in Word are commonly arranged as:
+        // A. [image] | B. [image] | C. [image] | D. [image]. Preserve a
+        // parseable A-D line and attach the image to that exact choice.
+        if (choiceCells.length > 0) {
+          for (const { cell, choiceIndex } of choiceCells) {
+            const cellText = (cell.textContent ?? "").trim();
+            const label = String.fromCharCode(65 + (choiceIndex as number));
+            lines.push(cellText.length > 2 ? cellText : `${label}. [Diagram]`);
+            collectImages(cell, latestQuestionNumber, choiceIndex);
+          }
+          continue;
+        }
+
         for (let i = 0; i < cells.length - 1; i += 2) {
           const num = (cells[i].textContent ?? "").trim();
           const ans = (cells[i + 1].textContent ?? "").trim();
