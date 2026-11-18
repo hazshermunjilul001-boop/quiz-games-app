@@ -46,19 +46,25 @@ export function importFromText(
 
   // 3. Fall back to parsing printed test text (matches TOS AI Generator's
   //    printed layout: "1. Question [level]" / "A. choice" ... / answer key)
-  const parsed = parsePrintedMcqText(trimmed, title);
+  const parsed = parsePrintedMcqText(trimmed, title, images);
   parsed.bank.source = source;
-  return attachExtractedImages(parsed.bank, images, parsed.warnings);
+  return parsed;
 }
 
 function attachExtractedImages(
   bank: QuestionBank,
   images: ExtractedImage[],
-  existingWarnings: string[] = []
+  existingWarnings: string[] = [],
+  questionNumbers?: number[]
 ): ImportResult {
   if (images.length === 0) return { bank, warnings: existingWarnings };
 
   const questions = bank.questions.filter((q): q is McqQuestion => q.type === "mcq");
+  const questionByNumber = new Map<number, McqQuestion>();
+  questionNumbers?.forEach((number, index) => {
+    const question = questions[index];
+    if (question) questionByNumber.set(number, question);
+  });
   const used = new Set<number>();
   const warnings = [...existingWarnings];
 
@@ -85,13 +91,13 @@ function attachExtractedImages(
   // 2. Mammoth document-order question-number hints.
   images.forEach((image, imageIndex) => {
     if (used.has(imageIndex) || image.questionNumber === undefined) return;
-    const question = questions.find(
-      (q) => !q.imageUrl && new RegExp(`(?:^|\\D)${image.questionNumber}(?:\\D|$)`).test(q.prompt)
-    );
-    // Printed question numbers are not retained in prompts, so use the
-    // question's document position when the hint falls within the bank.
-    const positional = questions[image.questionNumber - 1];
-    setImage(question ?? (positional && !positional.imageUrl ? positional : undefined), image, imageIndex);
+    const numbered = questionByNumber.get(image.questionNumber);
+    const question = numbered && !numbered.imageUrl
+      ? numbered
+      : questions.find(
+          (q) => !q.imageUrl && new RegExp(`(?:^|\\D)${image.questionNumber}(?:\\D|$)`).test(q.prompt)
+        );
+    setImage(question, image, imageIndex);
   });
 
   // 3. Remaining images attach to the next unillustrated MCQ in order.
@@ -189,7 +195,7 @@ function tryParseAsTosJson(text: string, title: string): ImportResult | null {
  * If no answer key is found at all, correctIndex defaults to 0 and a warning
  * is added so the teacher knows to fix it in the editor.
  */
-function parsePrintedMcqText(text: string, title: string): ImportResult {
+function parsePrintedMcqText(text: string, title: string, images: ExtractedImage[] = []): ImportResult {
   const warnings: string[] = [];
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
@@ -286,7 +292,7 @@ function parsePrintedMcqText(text: string, title: string): ImportResult {
     } as McqQuestion;
   });
 
-  return {
+  const result: ImportResult = {
     bank: {
       id: makeId("bank"),
       title,
@@ -296,6 +302,8 @@ function parsePrintedMcqText(text: string, title: string): ImportResult {
     },
     warnings,
   };
+
+  return attachExtractedImages(result.bank, images, result.warnings, drafts.map((d) => d.number));
 }
 
 /** Derives term-definition pairs from an MCQ bank (prompt -> correct choice),
