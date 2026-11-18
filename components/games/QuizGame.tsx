@@ -132,6 +132,8 @@ export default function QuizGame({
       items.push({
         label: `Item ${qi + 1}`,
         prompt: prepared.q.prompt,
+        imageUrl: prepared.q.imageUrl,
+        imageAlt: prepared.q.imageAlt,
         yourAnswer: picked === null ? "No answer" : prepared.shuffled[picked].text,
         correctAnswer: prepared.correctText,
         isCorrect,
@@ -200,7 +202,20 @@ export default function QuizGame({
       />
 
       <div className="mt-6 bg-white border border-zinc-200 rounded-3xl p-8 shadow-sm">
-        <p className="text-2xl font-bold text-[var(--foreground)] leading-snug">{current.q.prompt}</p>
+        <div className="space-y-4">
+          <p className="text-2xl font-bold text-[var(--foreground)] leading-snug">
+            {current.q.prompt}
+          </p>
+          {current.q.imageUrl && (
+            <div className="my-4 flex justify-center">
+              <img
+                src={current.q.imageUrl}
+                alt={current.q.imageAlt ?? "Question diagram"}
+                className="max-w-full max-h-72 rounded-xl border border-zinc-200 shadow-sm object-contain bg-white"
+              />
+            </div>
+          )}
+        </div>
 
         <div className="mt-6 grid gap-3">
           {current.shuffled.map((c, i) => {

@@ -19,6 +19,9 @@ export interface ReviewItem {
   label: string;
   /** The question text (for True/False this includes the shown statement). */
   prompt: string;
+  /** Optional diagram that was shown with the question. */
+  imageUrl?: string;
+  imageAlt?: string;
   /** What the student answered, shown under the prompt. */
   yourAnswer: string;
   /** The right answer — always shown for wrong items. */
@@ -121,6 +124,15 @@ export default function QuizResults({
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{item.label}</p>
                   <p className="text-sm font-semibold text-[var(--foreground)] leading-snug">{item.prompt}</p>
+                  {item.imageUrl && (
+                    <div className="my-2 flex justify-center">
+                      <img
+                        src={item.imageUrl}
+                        alt={item.imageAlt ?? "Question diagram"}
+                        className="max-w-full max-h-40 rounded-lg border border-zinc-200 shadow-sm object-contain bg-white"
+                      />
+                    </div>
+                  )}
                   <p className="text-sm mt-1.5">
                     <span className="text-zinc-500">Your answer: </span>
                     <span className={item.isCorrect ? "font-bold text-correct" : "font-bold text-incorrect"}>

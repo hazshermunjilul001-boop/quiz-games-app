@@ -24,6 +24,10 @@ export interface McqQuestion extends BaseQuestion {
   prompt: string;
   choices: string[]; // 2-6 choices
   correctIndex: number; // index into choices
+  /** Optional diagram / figure shown under the prompt. */
+  imageUrl?: string; // public URL, data URL, or path under /public
+  /** Accessibility text for the diagram, e.g. "Venn diagram of sets A and B". */
+  imageAlt?: string;
 }
 
 export interface TermDefinitionQuestion extends BaseQuestion {
