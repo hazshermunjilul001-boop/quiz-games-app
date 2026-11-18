@@ -82,15 +82,41 @@ function attachExtractedImages(
     used.add(imageIndex);
   };
 
+  const setChoiceImage = (question: McqQuestion | undefined, image: ExtractedImage, imageIndex: number) => {
+    if (!question || image.choiceIndex === undefined || image.choiceIndex < 0) return;
+    const choiceImages = [...(question.choiceImages ?? [])];
+    const choiceImageAlts = [...(question.choiceImageAlts ?? [])];
+    choiceImages[image.choiceIndex] = image.dataUrl;
+    choiceImageAlts[image.choiceIndex] = image.alt || choiceImageAlts[image.choiceIndex] || `Diagram for choice ${String.fromCharCode(65 + image.choiceIndex)}`;
+    question.choiceImages = choiceImages;
+    question.choiceImageAlts = choiceImageAlts;
+    used.add(imageIndex);
+  };
+
+  // Choice diagrams are handled first. Their choice index is carried from the
+  // nearest A., B., C. or D. paragraph in the DOCX, and their question number
+  // is resolved against the original printed numbering rather than array index.
+  images.forEach((image, imageIndex) => {
+    if (image.choiceIndex === undefined) return;
+    const question = image.questionNumber === undefined
+      ? undefined
+      : questionByNumber.get(image.questionNumber);
+    setChoiceImage(question, image, imageIndex);
+    if (!used.has(imageIndex)) {
+      warnings.push(`Choice diagram ${imageIndex + 1} could not be matched to its question and answer choice.`);
+    }
+  });
+
   // 1. Explicit filename/alt mention in the question stem.
   images.forEach((image, imageIndex) => {
+    if (image.choiceIndex !== undefined) return;
     const question = questions.find((q) => !q.imageUrl && filenameMatches(image, q));
     if (question) setImage(question, image, imageIndex);
   });
 
   // 2. Mammoth document-order question-number hints.
   images.forEach((image, imageIndex) => {
-    if (used.has(imageIndex) || image.questionNumber === undefined) return;
+    if (used.has(imageIndex) || image.choiceIndex !== undefined || image.questionNumber === undefined) return;
     const numbered = questionByNumber.get(image.questionNumber);
     const question = numbered && !numbered.imageUrl
       ? numbered
@@ -104,6 +130,9 @@ function attachExtractedImages(
   let nextQuestion = 0;
   images.forEach((image, imageIndex) => {
     if (used.has(imageIndex)) return;
+    if (image.choiceIndex !== undefined) {
+      return;
+    }
     while (nextQuestion < questions.length && questions[nextQuestion].imageUrl) nextQuestion++;
     if (nextQuestion < questions.length) {
       setImage(questions[nextQuestion], image, imageIndex);

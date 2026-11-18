@@ -24,8 +24,12 @@ export interface ReviewItem {
   imageAlt?: string;
   /** What the student answered, shown under the prompt. */
   yourAnswer: string;
+  yourAnswerImageUrl?: string;
+  yourAnswerImageAlt?: string;
   /** The right answer — always shown for wrong items. */
   correctAnswer: string;
+  correctAnswerImageUrl?: string;
+  correctAnswerImageAlt?: string;
   isCorrect: boolean;
 }
 
@@ -140,11 +144,17 @@ export default function QuizResults({
                       {item.yourAnswer}
                     </span>
                   </p>
+                  {item.yourAnswerImageUrl && (
+                    <img src={item.yourAnswerImageUrl} alt={item.yourAnswerImageAlt ?? "Your answer diagram"} className="mt-2 max-h-24 w-full rounded-lg border border-zinc-200 object-contain bg-white" />
+                  )}
                   {!item.isCorrect && (
                     <p className="text-sm mt-0.5">
                       <span className="text-zinc-500">Correct answer: </span>
                       <span className="font-bold text-correct">{item.correctAnswer}</span>
                     </p>
+                  )}
+                  {!item.isCorrect && item.correctAnswerImageUrl && (
+                    <img src={item.correctAnswerImageUrl} alt={item.correctAnswerImageAlt ?? "Correct answer diagram"} className="mt-2 max-h-24 w-full rounded-lg border border-correct/20 object-contain bg-white" />
                   )}
                 </div>
               </div>

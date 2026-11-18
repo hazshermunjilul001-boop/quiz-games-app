@@ -255,7 +255,14 @@ function ImportPreview({
                         key={ci}
                         className={ci === q.correctIndex ? "text-correct font-semibold" : "text-zinc-600"}
                       >
-                        {String.fromCharCode(65 + ci)}. {c} {ci === q.correctIndex && "✓"}
+                        <span>{String.fromCharCode(65 + ci)}. {c} {ci === q.correctIndex && "✓"}</span>
+                        {q.choiceImages?.[ci] && (
+                          <img
+                            src={q.choiceImages[ci]}
+                            alt={q.choiceImageAlts?.[ci] ?? `Diagram for choice ${String.fromCharCode(65 + ci)}`}
+                            className="mt-1 max-h-24 max-w-[12rem] rounded-lg border border-zinc-200 object-contain bg-white"
+                          />
+                        )}
                       </li>
                     ))}
                   </ul>

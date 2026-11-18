@@ -7,6 +7,8 @@ export type ExtractedImage = {
   alt?: string;
   nameHint?: string;
   questionNumber?: number;
+  /** Zero-based answer-choice index when the image follows A., B., C., etc. */
+  choiceIndex?: number;
 };
 
 export type ExtractedFile = {
@@ -68,6 +70,11 @@ function questionNumberIn(text: string): number | undefined {
   return number ? Number(number) : undefined;
 }
 
+function choiceIndexIn(text: string): number | undefined {
+  const match = text.match(/^\s*([A-F])[.)](?:\s|$)/i);
+  return match ? "ABCDEF".indexOf(match[1].toUpperCase()) : undefined;
+}
+
 /**
  * Converts Mammoth HTML into the same one-line-per-paragraph text used by the
  * existing parser, while collecting images in document order. Images inherit
@@ -79,8 +86,9 @@ function docxHtmlToStructuredText(html: string): ExtractedFile {
   const lines: string[] = [];
   const images: ExtractedImage[] = [];
   let latestQuestionNumber: number | undefined;
+  let latestChoiceIndex: number | undefined;
 
-  const collectImages = (root: Element, questionHint?: number) => {
+  const collectImages = (root: Element, questionHint?: number, choiceHint?: number) => {
     for (const img of Array.from(root.querySelectorAll("img"))) {
       const dataUrl = img.getAttribute("src");
       if (!dataUrl?.startsWith("data:")) continue;
@@ -90,6 +98,7 @@ function docxHtmlToStructuredText(html: string): ExtractedFile {
         alt,
         nameHint: alt,
         questionNumber: questionHint ?? latestQuestionNumber,
+        choiceIndex: choiceHint ?? latestChoiceIndex,
       });
     }
   };
@@ -109,11 +118,16 @@ function docxHtmlToStructuredText(html: string): ExtractedFile {
       continue;
     }
 
-    const localQuestionNumber = questionNumberIn(el.textContent ?? "");
-    if (localQuestionNumber !== undefined) latestQuestionNumber = localQuestionNumber;
-    collectImages(el, localQuestionNumber);
-
     const text = (el.textContent ?? "").trim();
+    const localQuestionNumber = questionNumberIn(text);
+    if (localQuestionNumber !== undefined) {
+      latestQuestionNumber = localQuestionNumber;
+      latestChoiceIndex = undefined;
+    }
+    const localChoiceIndex = choiceIndexIn(text);
+    if (localChoiceIndex !== undefined) latestChoiceIndex = localChoiceIndex;
+    collectImages(el, localQuestionNumber, localChoiceIndex);
+
     if (text) lines.push(text);
   }
 

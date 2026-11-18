@@ -28,6 +28,10 @@ export interface McqQuestion extends BaseQuestion {
   imageUrl?: string; // public URL, data URL, or path under /public
   /** Accessibility text for the diagram, e.g. "Venn diagram of sets A and B". */
   imageAlt?: string;
+  /** Optional diagram shown inside each answer choice, in choices[] order. */
+  choiceImages?: (string | undefined)[];
+  /** Accessibility text for each optional choice diagram. */
+  choiceImageAlts?: (string | undefined)[];
 }
 
 export interface TermDefinitionQuestion extends BaseQuestion {

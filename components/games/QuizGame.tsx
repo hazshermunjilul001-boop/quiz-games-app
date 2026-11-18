@@ -29,7 +29,7 @@ interface PreparedQuestion {
   q: McqQuestion;
   /** The choice order for THIS run, pre-shuffled once — remembered so the
    * end-of-quiz review can map the student's pick back to correctness. */
-  shuffled: { text: string; isCorrect: boolean }[];
+  shuffled: { text: string; isCorrect: boolean; imageUrl?: string; imageAlt?: string }[];
   /** Text of the correct choice, in the ORIGINAL choices order — used as
    * "Correct answer" in the review (stable regardless of shuffling). */
   correctText: string;
@@ -51,7 +51,12 @@ export default function QuizGame({
     () =>
       shuffle(bank.questions.filter((q): q is McqQuestion => q.type === "mcq")).map((q) => ({
         q,
-        shuffled: shuffle(q.choices.map((text, i) => ({ text, isCorrect: i === q.correctIndex }))),
+        shuffled: shuffle(q.choices.map((text, i) => ({
+          text,
+          isCorrect: i === q.correctIndex,
+          imageUrl: q.choiceImages?.[i],
+          imageAlt: q.choiceImageAlts?.[i],
+        }))),
         correctText: q.choices[q.correctIndex],
       })),
     [bank]
@@ -138,6 +143,10 @@ export default function QuizGame({
         imageAlt: prepared.q.imageAlt,
         yourAnswer: picked === null ? "No answer" : prepared.shuffled[picked].text,
         correctAnswer: prepared.correctText,
+        yourAnswerImageUrl: picked === null ? undefined : prepared.shuffled[picked].imageUrl,
+        yourAnswerImageAlt: picked === null ? undefined : prepared.shuffled[picked].imageAlt,
+        correctAnswerImageUrl: prepared.q.choiceImages?.[prepared.q.correctIndex],
+        correctAnswerImageAlt: prepared.q.choiceImageAlts?.[prepared.q.correctIndex],
         isCorrect,
       });
     });
@@ -239,6 +248,13 @@ export default function QuizGame({
                   !answered ? "hover:border-brand hover:bg-brand-light active:scale-[0.98] cursor-pointer" : "",
                 ].join(" ")}
               >
+                {c.imageUrl && (
+                  <img
+                    src={c.imageUrl}
+                    alt={c.imageAlt ?? "Answer choice diagram"}
+                    className="mb-2 max-h-28 w-full rounded-lg object-contain bg-white/70"
+                  />
+                )}
                 {c.text}
               </button>
             );
