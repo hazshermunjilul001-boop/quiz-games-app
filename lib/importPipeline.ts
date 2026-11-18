@@ -5,6 +5,7 @@
 // raw text itself.
 
 import { McqQuestion, Question, QuestionBank, QuestionType } from "./schema";
+import { ExtractedImage } from "./fileParse";
 
 let idCounter = 0;
 function makeId(prefix: string): string {
@@ -27,20 +28,86 @@ export interface ImportResult {
   warnings: string[];
 }
 
-export function importFromText(raw: string, title = "Imported Quiz"): ImportResult {
+export function importFromText(
+  raw: string,
+  title = "Imported Quiz",
+  images: ExtractedImage[] = [],
+  source: QuestionBank["source"] = "paste"
+): ImportResult {
   const trimmed = raw.trim();
 
   // 1. Try canonical QuestionBank JSON (this app's own export format)
   const asBank = tryParseAsQuestionBank(trimmed);
-  if (asBank) return { bank: asBank, warnings: [] };
+  if (asBank) return attachExtractedImages(asBank, images);
 
   // 2. Try TOS AI Generator's raw JSON item array
   const asTosJson = tryParseAsTosJson(trimmed, title);
-  if (asTosJson) return asTosJson;
+  if (asTosJson) return attachExtractedImages(asTosJson.bank, images, asTosJson.warnings);
 
   // 3. Fall back to parsing printed test text (matches TOS AI Generator's
   //    printed layout: "1. Question [level]" / "A. choice" ... / answer key)
-  return parsePrintedMcqText(trimmed, title);
+  const parsed = parsePrintedMcqText(trimmed, title);
+  parsed.bank.source = source;
+  return attachExtractedImages(parsed.bank, images, parsed.warnings);
+}
+
+function attachExtractedImages(
+  bank: QuestionBank,
+  images: ExtractedImage[],
+  existingWarnings: string[] = []
+): ImportResult {
+  if (images.length === 0) return { bank, warnings: existingWarnings };
+
+  const questions = bank.questions.filter((q): q is McqQuestion => q.type === "mcq");
+  const used = new Set<number>();
+  const warnings = [...existingWarnings];
+
+  const normalized = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const filenameMatches = (image: ExtractedImage, question: McqQuestion) => {
+    if (!image.nameHint) return false;
+    const hint = normalized(image.nameHint);
+    return Boolean(hint) && normalized(question.prompt).includes(hint);
+  };
+
+  const setImage = (question: McqQuestion | undefined, image: ExtractedImage, imageIndex: number) => {
+    if (!question) return;
+    question.imageUrl = image.dataUrl;
+    question.imageAlt = image.alt || question.imageAlt || "Question diagram";
+    used.add(imageIndex);
+  };
+
+  // 1. Explicit filename/alt mention in the question stem.
+  images.forEach((image, imageIndex) => {
+    const question = questions.find((q) => !q.imageUrl && filenameMatches(image, q));
+    if (question) setImage(question, image, imageIndex);
+  });
+
+  // 2. Mammoth document-order question-number hints.
+  images.forEach((image, imageIndex) => {
+    if (used.has(imageIndex) || image.questionNumber === undefined) return;
+    const question = questions.find(
+      (q) => !q.imageUrl && new RegExp(`(?:^|\\D)${image.questionNumber}(?:\\D|$)`).test(q.prompt)
+    );
+    // Printed question numbers are not retained in prompts, so use the
+    // question's document position when the hint falls within the bank.
+    const positional = questions[image.questionNumber - 1];
+    setImage(question ?? (positional && !positional.imageUrl ? positional : undefined), image, imageIndex);
+  });
+
+  // 3. Remaining images attach to the next unillustrated MCQ in order.
+  let nextQuestion = 0;
+  images.forEach((image, imageIndex) => {
+    if (used.has(imageIndex)) return;
+    while (nextQuestion < questions.length && questions[nextQuestion].imageUrl) nextQuestion++;
+    if (nextQuestion < questions.length) {
+      setImage(questions[nextQuestion], image, imageIndex);
+      nextQuestion++;
+    } else {
+      warnings.push(`Image ${imageIndex + 1} could not be matched to a multiple-choice question.`);
+    }
+  });
+
+  return { bank, warnings };
 }
 
 function tryParseAsQuestionBank(text: string): QuestionBank | null {

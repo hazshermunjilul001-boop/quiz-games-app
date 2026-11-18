@@ -1,26 +1,39 @@
 // lib/fileParse.ts
-// Extracts plain text from an uploaded file, entirely in the browser
-// (no file ever touches a server). Same pattern as TOS AI Generator's
-// lib/fileParse.ts, so teachers get consistent behavior across both apps.
+// Extracts text and embedded images from uploaded files entirely in the browser.
+// DOCX images are returned as data URLs so they can travel with a QuestionBank.
 
-export async function extractTextFromFile(file: File): Promise<string> {
+export type ExtractedImage = {
+  dataUrl: string;
+  alt?: string;
+  nameHint?: string;
+  questionNumber?: number;
+};
+
+export type ExtractedFile = {
+  text: string;
+  images: ExtractedImage[];
+};
+
+export async function extractFromFile(file: File): Promise<ExtractedFile> {
   const name = file.name.toLowerCase();
 
   if (name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".json")) {
-    return await file.text();
+    return { text: await file.text(), images: [] };
   }
 
   if (name.endsWith(".docx")) {
     const mammoth = await import("mammoth");
     const arrayBuffer = await file.arrayBuffer();
-    // NOTE: we deliberately use convertToHtml (not extractRawText) here.
-    // extractRawText flattens tables into one cell per line with no
-    // delimiter, which silently breaks table-based answer keys (the format
-    // DepEd test templates commonly use: "Item # | Answer | Item # | Answer").
-    // convertToHtml preserves <table> structure so we can serialize each
-    // row back into the "N. Letter" line format importPipeline already
-    // expects for the answer key section.
-    const result = await mammoth.convertToHtml({ arrayBuffer });
+    const result = await mammoth.convertToHtml(
+      { arrayBuffer },
+      {
+        convertImage: mammoth.images.imgElement(async (image: any) => {
+          const base64 = await image.read("base64");
+          const contentType = image.contentType || "image/png";
+          return { src: `data:${contentType};base64,${base64}` };
+        }),
+      }
+    );
     return docxHtmlToStructuredText(result.value);
   }
 
@@ -37,44 +50,72 @@ export async function extractTextFromFile(file: File): Promise<string> {
       const pageText = content.items.map((it: any) => it.str).join(" ");
       fullText += pageText + "\n";
     }
-    return fullText;
+    return { text: fullText, images: [] };
   }
 
-  throw new Error(
-    "Unsupported file type. Please upload a .txt, .docx, .pdf, or .json file."
-  );
+  throw new Error("Unsupported file type. Please upload a .txt, .docx, .pdf, or .json file.");
+}
+
+/** Compatibility wrapper for callers that only need text. */
+export async function extractTextFromFile(file: File): Promise<string> {
+  const { text } = await extractFromFile(file);
+  return text;
+}
+
+function questionNumberIn(text: string): number | undefined {
+  const match = text.match(/(?:^|\b)(?:question|item)\s*(\d+)\b|^\s*(\d+)\s*[.)]/i);
+  const number = match?.[1] ?? match?.[2];
+  return number ? Number(number) : undefined;
 }
 
 /**
- * Converts mammoth's HTML output into the same one-line-per-paragraph plain
- * text extractRawText would produce, EXCEPT tables are walked structurally:
- * each row's cells are paired up (Item#, Answer, Item#, Answer, ...) and
- * re-emitted as "N. Letter" lines — the exact shape parsePrintedMcqText's
- * answer-key parser already looks for. This keeps importPipeline.ts working
- * on a single plain-text string (its one entry point) while fixing table
- * based answer keys instead of losing them.
+ * Converts Mammoth HTML into the same one-line-per-paragraph text used by the
+ * existing parser, while collecting images in document order. Images inherit
+ * the latest question number seen before them; an image in the same paragraph
+ * as a numbered question is linked to that question immediately.
  */
-function docxHtmlToStructuredText(html: string): string {
+function docxHtmlToStructuredText(html: string): ExtractedFile {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const lines: string[] = [];
+  const images: ExtractedImage[] = [];
+  let latestQuestionNumber: number | undefined;
+
+  const collectImages = (root: Element, questionHint?: number) => {
+    for (const img of Array.from(root.querySelectorAll("img"))) {
+      const dataUrl = img.getAttribute("src");
+      if (!dataUrl?.startsWith("data:")) continue;
+      const alt = img.getAttribute("alt") || undefined;
+      images.push({
+        dataUrl,
+        alt,
+        nameHint: alt,
+        questionNumber: questionHint ?? latestQuestionNumber,
+      });
+    }
+  };
 
   for (const el of Array.from(doc.body.children)) {
     if (el.tagName === "TABLE") {
       for (const row of Array.from(el.querySelectorAll("tr"))) {
-        const cells = Array.from(row.querySelectorAll("td,th")).map((c) =>
-          (c.textContent ?? "").trim()
-        );
+        const cells = Array.from(row.querySelectorAll("td,th"));
         for (let i = 0; i < cells.length - 1; i += 2) {
-          const num = cells[i];
-          const ans = cells[i + 1];
+          const num = (cells[i].textContent ?? "").trim();
+          const ans = (cells[i + 1].textContent ?? "").trim();
           if (/^\d+$/.test(num) && ans) lines.push(`${num}. ${ans}`);
+          collectImages(cells[i], questionNumberIn(num));
+          collectImages(cells[i + 1], questionNumberIn(num));
         }
       }
-    } else {
-      const text = (el.textContent ?? "").trim();
-      if (text) lines.push(text);
+      continue;
     }
+
+    const localQuestionNumber = questionNumberIn(el.textContent ?? "");
+    if (localQuestionNumber !== undefined) latestQuestionNumber = localQuestionNumber;
+    collectImages(el, localQuestionNumber);
+
+    const text = (el.textContent ?? "").trim();
+    if (text) lines.push(text);
   }
 
-  return lines.join("\n");
+  return { text: lines.join("\n"), images };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { extractTextFromFile } from "@/lib/fileParse";
+import { extractFromFile } from "@/lib/fileParse";
 import { importFromText, ImportResult } from "@/lib/importPipeline";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
 import { useCurrentUser } from "@/lib/auth";
@@ -21,10 +21,15 @@ export default function Home() {
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function runImport(text: string, title: string) {
+  function runImport(
+    text: string,
+    title: string,
+    images: import("@/lib/fileParse").ExtractedImage[] = [],
+    source: QuestionBank["source"] = "paste"
+  ) {
     setError(null);
     try {
-      const res = importFromText(text, title);
+      const res = importFromText(text, title, images, source);
       setResult(res);
     } catch (e: any) {
       setResult(null);
@@ -35,9 +40,11 @@ export default function Home() {
   async function handleFile(file: File) {
     setFileName(file.name);
     try {
-      const text = await extractTextFromFile(file);
-      setRawText(text);
-      runImport(text, file.name.replace(/\.[^.]+$/, ""));
+      const extracted = await extractFromFile(file);
+      setRawText(extracted.text);
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      const source: QuestionBank["source"] = extension === "docx" ? "docx" : extension === "pdf" ? "pdf" : "paste";
+      runImport(extracted.text, file.name.replace(/\.[^.]+$/, ""), extracted.images, source);
     } catch (e: any) {
       setError(e.message ?? "Couldn't read this file.");
     }
@@ -262,6 +269,26 @@ function ImportPreview({
                       />
                       <div className="flex flex-col gap-1">
                         <span className="text-xs font-bold text-brand-dark">Diagram attached</span>
+                        <input
+                          ref={(el) => {
+                            diagramInputRefs.current[q.id] = el;
+                          }}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] ?? null;
+                            e.target.value = "";
+                            void attachDiagram(q.id, file);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => diagramInputRefs.current[q.id]?.click()}
+                          className="text-xs font-bold text-brand hover:text-brand-dark underline underline-offset-2 cursor-pointer text-left"
+                        >
+                          Replace diagram
+                        </button>
                         <button
                           type="button"
                           onClick={() => removeDiagram(q.id)}

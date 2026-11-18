@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import "./globals.css";
 import Banner from "@/components/Banner";
 import { BRAND_NAME } from "@/lib/brand";
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="h-full antialiased" style={{ colorScheme: "light" }}>
       <body className="min-h-full flex flex-col font-sans">
