@@ -15,6 +15,9 @@ import { McqQuestion, QuestionBank } from "@/lib/schema";
 import { shuffle, pickRandom } from "@/lib/gameHelpers";
 import { GameHeader, EmptyState } from "./QuizGame";
 import QuizResults, { ReviewItem } from "./QuizResults";
+import ThemedCard from "./ui/ThemedCard";
+import HitBurst from "./ui/HitBurst";
+import ScorePop from "./ui/ScorePop";
 import {
   AttemptContext,
   AttemptSummary,
@@ -89,6 +92,7 @@ export default function WhackAMole({
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [durationSec, setDurationSec] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [hitFeedback, setHitFeedback] = useState(false);
 
   const moleIdRef = useRef(0);
   const spawnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -159,6 +163,8 @@ export default function WhackAMole({
     // NOTE: deliberately no correct/wrong reveal here — students find out
     // everything on the results screen at the end.
     setRoundOver(true);
+    setHitFeedback(true);
+    window.setTimeout(() => setHitFeedback(false), 500);
   }
 
   function advance() {
@@ -249,25 +255,29 @@ export default function WhackAMole({
         onExit={onExit}
       />
 
-      <div className="mt-6 bg-white border border-zinc-200 rounded-xl p-4">
-        <p className="font-semibold text-zinc-900 text-center mb-3">
-          Whack the answer to: <span className="text-indigo-700">{current.prompt}</span>
+      <ThemedCard family="arcade" className="mt-6">
+        <div className="relative z-10">
+        <p className="font-black text-white text-center mb-4 text-lg leading-snug">
+          Whack the answer to: <span className="text-amber-200">{current.prompt}</span>
         </p>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3 sm:gap-5">
           {Array.from({ length: HOLES }, (_, i) => (
-            <div key={i} className="relative aspect-square bg-amber-900/10 rounded-full border-4 border-amber-900/20 flex items-center justify-center overflow-hidden">
+            <div key={i} className="relative aspect-square rounded-[50%] bg-gradient-to-b from-stone-950 to-stone-800 border-8 border-amber-950/60 shadow-[inset_0_10px_18px_rgb(0_0_0/.7),0_5px_0_rgb(0_0_0/.25)] flex items-center justify-center overflow-hidden">
               {mole?.hole === i && (
                 <button
                   onClick={() => whack(mole)}
-                  className="absolute inset-2 rounded-full bg-amber-700 text-white text-xs font-semibold flex items-center justify-center text-center p-1 cursor-pointer hover:bg-amber-600"
+                  className="mole-pop absolute inset-1 rounded-[45%] bg-gradient-to-b from-amber-500 to-amber-800 text-white text-xs font-black flex flex-col items-center justify-center text-center p-1 cursor-pointer hover:brightness-110 shadow-lg"
                 >
-                  {mole.text}
+                  <span className="text-3xl leading-none" aria-hidden>🦔</span>
+                  <span className="mt-1 line-clamp-3">{mole.text}</span>
                 </button>
               )}
             </div>
           ))}
         </div>
+
+        <div className="pointer-events-none absolute inset-0"><HitBurst active={hitFeedback} /><ScorePop value="POW!" show={hitFeedback} /></div>
 
         {roundOver && (
           <p className="mt-4 text-center font-medium text-zinc-500">
@@ -275,10 +285,11 @@ export default function WhackAMole({
           </p>
         )}
 
-        <p className="mt-3 text-xs text-zinc-400 text-center">
+        <p className="mt-4 text-xs text-white/65 text-center">
           Answers stay hidden until you finish — you&rsquo;ll get a full review at the end.
         </p>
-      </div>
+        </div>
+      </ThemedCard>
     </div>
   );
 }

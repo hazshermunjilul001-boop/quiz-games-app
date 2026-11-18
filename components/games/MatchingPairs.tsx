@@ -5,6 +5,7 @@ import { QuestionBank, TermDefinitionQuestion } from "@/lib/schema";
 import { shuffle } from "@/lib/gameHelpers";
 import { GameHeader, EmptyState } from "./QuizGame";
 import CompletionCard from "./CompletionCard";
+import ThemedCard from "./ui/ThemedCard";
 
 interface Tile {
   key: string;
@@ -67,7 +68,7 @@ export default function MatchingPairs({ bank, onExit }: { bank: QuestionBank; on
     <div className="max-w-2xl mx-auto">
       <GameHeader title="Matching Pairs" progress={`${matched.size / 2} / ${pairs.length} pairs · ${moves} moves`} onExit={onExit} />
 
-      <div className="mt-6 grid grid-cols-3 sm:grid-cols-4 gap-3">
+      <ThemedCard family="paper" className="mt-6 grid grid-cols-3 sm:grid-cols-4 gap-3">
         {tiles.map((tile) => {
           const isMatched = matched.has(tile.key);
           const isSelected = selected.includes(tile.key);
@@ -78,7 +79,7 @@ export default function MatchingPairs({ bank, onExit }: { bank: QuestionBank; on
               onClick={() => tap(tile)}
               disabled={isMatched}
               className={[
-                "min-h-20 rounded-lg border p-2 text-xs font-medium flex items-center justify-center text-center transition-colors",
+                "min-h-20 rounded-xl border-2 p-2 text-xs font-black flex items-center justify-center text-center transition-all active:scale-95 shadow-[0_3px_0_rgb(120_82_36/.18)]",
                 isMatched ? "bg-green-50 border-green-300 text-green-700 opacity-60" : "",
                 isWrong ? "bg-red-50 border-red-400 text-red-700" : "",
                 !isMatched && !isWrong && isSelected ? "bg-indigo-50 border-indigo-400 text-indigo-900" : "",
@@ -89,7 +90,7 @@ export default function MatchingPairs({ bank, onExit }: { bank: QuestionBank; on
             </button>
           );
         })}
-      </div>
+      </ThemedCard>
 
       {allMatched && (
         <CompletionCard message={`All matched in ${moves} moves!`} onAction={restart} />

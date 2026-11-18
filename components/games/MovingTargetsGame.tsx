@@ -16,6 +16,10 @@ import { McqQuestion, QuestionBank } from "@/lib/schema";
 import { shuffle } from "@/lib/gameHelpers";
 import { GameHeader, EmptyState } from "./QuizGame";
 import QuizResults, { ReviewItem } from "./QuizResults";
+import ThemedCard from "./ui/ThemedCard";
+import HitBurst from "./ui/HitBurst";
+import ScorePop from "./ui/ScorePop";
+import QuestionTransition from "./ui/QuestionTransition";
 import {
   AttemptContext,
   AttemptSummary,
@@ -98,6 +102,7 @@ export default function MovingTargetsGame({
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [durationSec, setDurationSec] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [hitFeedback, setHitFeedback] = useState(false);
 
   const current = questions[index];
 
@@ -151,6 +156,8 @@ export default function MovingTargetsGame({
     // NOTE: deliberately no correct/wrong reveal here — students find out
     // everything on the results screen at the end.
     setRoundOver(true);
+    setHitFeedback(true);
+    window.setTimeout(() => setHitFeedback(false), 500);
   }
 
   function advance() {
@@ -242,24 +249,28 @@ export default function MovingTargetsGame({
         onExit={onExit}
       />
 
-      <div className="mt-6 bg-white border border-zinc-200 rounded-xl p-4">
-        <p className="font-semibold text-zinc-900 text-center mb-3">{current.prompt}</p>
+      <ThemedCard family="arcade" className="mt-6">
+        <QuestionTransition transitionKey={current.id}>
+        <p className="font-black text-white text-center mb-4 text-lg leading-snug">{current.prompt}</p>
 
-        <div className={`relative h-64 rounded-lg overflow-hidden ${variant.background}`}>
+        <div className={`relative h-72 rounded-3xl overflow-hidden border border-white/30 shadow-inner ${variant.background}`}>
+          <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/35" />
           {tokens.map((token) => (
             <button
               key={token.key}
               onClick={() => tap(token)}
-              className="moving-target absolute px-3 py-1.5 rounded-full bg-white/90 border border-zinc-300 text-sm font-medium text-zinc-900 hover:bg-white cursor-pointer whitespace-nowrap"
+              className="moving-target absolute flex items-center gap-1.5 rounded-2xl bg-white/95 border-2 border-white text-sm font-black text-zinc-900 shadow-[0_6px_0_rgb(15_23_42/.2)] hover:scale-110 cursor-pointer whitespace-nowrap px-3 py-2"
               style={{
                 top: `${(token.lane / LANES) * 100 + 100 / LANES / 2}%`,
                 animationDuration: `${token.durationMs}ms`,
                 animationDelay: `${token.delayMs}ms`,
               }}
             >
-              {variant.icon} {token.text}
+              <span className="text-xl" aria-hidden>{variant.icon}</span> {token.text}
             </button>
           ))}
+
+          <div className="pointer-events-none absolute inset-0"><HitBurst active={hitFeedback} tone="sky" /><ScorePop value="WHOOSH!" show={hitFeedback} /></div>
 
           {roundOver && (
             <div className="absolute inset-x-0 bottom-2 flex justify-center pointer-events-none">
@@ -269,11 +280,12 @@ export default function MovingTargetsGame({
             </div>
           )}
         </div>
+        </QuestionTransition>
 
-        <p className="mt-3 text-xs text-zinc-400 text-center">
+        <p className="mt-4 text-xs text-white/65 text-center">
           Answers stay hidden until you finish — you&rsquo;ll get a full review at the end.
         </p>
-      </div>
+      </ThemedCard>
 
       <style jsx>{`
         .moving-target {

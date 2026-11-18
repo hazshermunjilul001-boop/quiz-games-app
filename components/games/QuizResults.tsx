@@ -59,9 +59,9 @@ export default function QuizResults({
   const wrongCount = total - score;
 
   return (
-    <div className="max-w-xl mx-auto text-center bg-white border border-zinc-200 rounded-3xl p-8 sm:p-10 shadow-sm relative overflow-hidden">
+    <div className="max-w-xl mx-auto text-center bg-gradient-to-br from-white via-brand-light/60 to-amber-50 border border-white rounded-[2rem] p-6 sm:p-10 shadow-[0_20px_60px_rgb(28_43_36/.16)] relative overflow-hidden">
       <Confetti />
-      <p className="text-xs font-bold uppercase tracking-widest text-brand">Quiz complete</p>
+      <p className="text-xs font-black uppercase tracking-[.25em] text-brand">Challenge complete</p>
       <div className="stamp-pop inline-flex flex-col items-center justify-center w-40 h-40 rounded-full border-4 border-gold bg-gold/10 mx-auto mt-3">
         <p className="text-4xl font-black text-brand-dark leading-none">
           {score}
@@ -69,7 +69,8 @@ export default function QuizResults({
         </p>
         <p className="text-gold-dark font-bold text-sm mt-1">{pct}%</p>
       </div>
-      <p className="text-xl font-bold text-[var(--foreground)] mt-6">{cheer}</p>
+      <p className="text-2xl font-black text-[var(--foreground)] mt-6">{cheer}</p>
+      <p className="text-sm text-zinc-600 mt-1">Your answers are ready for a closer look.</p>
 
       {/* Time taken + attempt number — the facts the teacher asked for. */}
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">

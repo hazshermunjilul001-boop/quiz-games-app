@@ -22,6 +22,8 @@ import {
 } from "@/lib/attempts";
 import QuizResults, { ReviewItem } from "./QuizResults";
 import Confetti from "./Confetti";
+import ThemedCard from "./ui/ThemedCard";
+import QuestionTransition from "./ui/QuestionTransition";
 
 interface PreparedQuestion {
   q: McqQuestion;
@@ -201,7 +203,8 @@ export default function QuizGame({
         onExit={onExit}
       />
 
-      <div className="mt-6 bg-white border border-zinc-200 rounded-3xl p-8 shadow-sm">
+      <ThemedCard family="classic" className="mt-6 p-5 sm:p-8">
+        <QuestionTransition transitionKey={current.q.id}>
         <div className="space-y-4">
           <p className="text-2xl font-bold text-[var(--foreground)] leading-snug">
             {current.q.prompt}
@@ -251,10 +254,11 @@ export default function QuizGame({
           </button>
         )}
 
-        <p className="mt-4 text-xs text-zinc-400">
+        <p className="mt-4 text-xs text-zinc-500">
           Answers stay hidden until you finish — you&rsquo;ll get a full review at the end.
         </p>
-      </div>
+        </QuestionTransition>
+      </ThemedCard>
     </div>
   );
 }

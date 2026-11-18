@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { QuestionBank, TermDefinitionQuestion } from "@/lib/schema";
 import { shuffle } from "@/lib/gameHelpers";
 import { GameHeader, ResultsScreen, EmptyState } from "./QuizGame";
+import ThemedCard from "./ui/ThemedCard";
+import HitBurst from "./ui/HitBurst";
 
 const COLORS = ["#ef4444", "#3b82f6", "#eab308", "#22c55e", "#a855f7", "#f97316"];
 const ROUND_MS = 7000;
@@ -88,33 +90,36 @@ export default function BalloonPop({ bank, onExit }: { bank: QuestionBank; onExi
     <div className="max-w-2xl mx-auto">
       <GameHeader title="Balloon Pop" progress={`${index + 1} / ${pairs.length} · score ${score}`} onExit={onExit} />
 
-      <div className="mt-6 bg-white border border-zinc-200 rounded-xl p-4">
-        <p className="font-semibold text-zinc-900 text-center mb-3">Pop the balloon for: {current.definition}</p>
+      <ThemedCard family="arcade" className="mt-6">
+        <p className="font-black text-white text-center mb-4 text-lg">Pop the balloon for: <span className="text-sky-100">{current.definition}</span></p>
 
-        <div className="relative h-72 rounded-lg overflow-hidden bg-gradient-to-b from-sky-50 to-sky-100">
+        <div className="relative h-80 rounded-3xl overflow-hidden bg-gradient-to-b from-sky-400/70 via-sky-500/45 to-indigo-950/60 border border-white/30 shadow-inner">
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-indigo-950/35 to-transparent" />
           {balloons.map((b) => (
             <button
               key={b.key}
               onClick={() => pop(b)}
               disabled={result !== null}
-              className={`balloon absolute px-3 py-4 rounded-full text-white text-xs font-semibold shadow-md cursor-pointer text-center ${
-                poppedKey === b.key ? (b.isCorrect ? "scale-0 opacity-0" : "animate-pulse") : ""
+              className={`balloon absolute px-3 py-4 text-white text-xs font-black shadow-xl cursor-pointer text-center ${
+                poppedKey === b.key ? (b.isCorrect ? "balloon-popped" : "animate-pulse") : ""
               }`}
               style={{
                 left: `${b.leftPct}%`,
                 backgroundColor: b.color,
                 animationDuration: `${b.durationMs}ms`,
                 animationDelay: `${b.delayMs}ms`,
-                width: "84px",
-                height: "100px",
+                width: "86px",
+                height: "104px",
                 transition: "transform 300ms, opacity 300ms",
               }}
             >
               {b.term}
+              <span className="absolute left-1/2 top-full h-14 w-px -translate-x-1/2 bg-white/75" aria-hidden />
             </button>
           ))}
+          {poppedKey && <HitBurst active tone="sky" />}
         </div>
-      </div>
+      </ThemedCard>
 
       <style jsx>{`
         .balloon {
@@ -128,8 +133,10 @@ export default function BalloonPop({ bank, onExit }: { bank: QuestionBank; onExi
             transform: translateY(0);
           }
           to {
-            transform: translateY(-420px);
-          }
+          transform: translateY(-420px);
+          border-radius: 52% 52% 48% 48%;
+          clip-path: polygon(50% 100%, 44% 91%, 12% 70%, 3% 42%, 12% 16%, 34% 2%, 50% 0, 66% 2%, 88% 16%, 97% 42%, 88% 70%, 56% 91%);
+        }
         }
       `}</style>
     </div>

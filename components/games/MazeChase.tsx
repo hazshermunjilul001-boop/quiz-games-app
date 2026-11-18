@@ -16,6 +16,8 @@ import { McqQuestion, QuestionBank } from "@/lib/schema";
 import { shuffle } from "@/lib/gameHelpers";
 import { GameHeader, EmptyState } from "./QuizGame";
 import QuizResults, { ReviewItem } from "./QuizResults";
+import ThemedCard from "./ui/ThemedCard";
+import HitBurst from "./ui/HitBurst";
 import {
   AttemptContext,
   AttemptSummary,
@@ -248,12 +250,12 @@ export default function MazeChase({
         onExit={onExit}
       />
 
-      <div className="mt-6 bg-white border border-zinc-200 rounded-xl p-4">
-        <p className="font-semibold text-zinc-900 text-center mb-3">
-          Run to the answer for: <span className="text-indigo-700">{current.prompt}</span>
+      <ThemedCard family="arcade" className="mt-6">
+        <p className="font-black text-white text-center mb-4 text-lg leading-snug">
+          Run to the answer for: <span className="text-emerald-200">{current.prompt}</span>
         </p>
 
-        <div className="grid gap-1 mx-auto" style={{ gridTemplateColumns: `repeat(${GRID}, minmax(0, 1fr))`, maxWidth: 340 }}>
+        <div className="grid gap-1.5 mx-auto rounded-2xl bg-slate-950/70 p-2 border-4 border-emerald-300/30 shadow-inner" style={{ gridTemplateColumns: `repeat(${GRID}, minmax(0, 1fr))`, maxWidth: 360 }}>
           {grid.map((row, r) =>
             row.map((cell, c) => {
               const isPlayer = pos.row === r && pos.col === c;
@@ -261,13 +263,13 @@ export default function MazeChase({
                 <div
                   key={`${r}-${c}`}
                   className={[
-                    "aspect-square rounded-md border flex items-center justify-center text-[10px] font-medium text-center p-0.5 leading-tight",
-                    cell.kind === "enemy" ? "bg-red-100 border-red-300 text-red-700" : "",
-                    cell.kind === "choice" ? "bg-indigo-50 border-indigo-300 text-indigo-800" : "",
-                    cell.kind === "empty" ? "bg-zinc-50 border-zinc-200" : "",
+                    "aspect-square rounded-lg border-2 flex items-center justify-center text-[10px] font-black text-center p-0.5 leading-tight transition-transform duration-150",
+                    cell.kind === "enemy" ? "bg-rose-500/80 border-rose-200 text-white shadow-[0_0_12px_rgb(244_63_94/.45)]" : "",
+                    cell.kind === "choice" ? "bg-amber-300 border-amber-100 text-amber-950 shadow-[0_0_12px_rgb(250_204_21/.45)] hover:scale-105" : "",
+                    cell.kind === "empty" ? "bg-emerald-900/60 border-emerald-500/25 text-white/20" : "",
                   ].join(" ")}
                 >
-                  {isPlayer ? "🧑" : cell.kind === "enemy" ? "👾" : cell.label}
+                  {isPlayer ? "🧭" : cell.kind === "enemy" ? "👾" : cell.label}
                 </div>
               );
             })
@@ -275,25 +277,25 @@ export default function MazeChase({
         </div>
 
         <div className="mt-4 flex flex-col items-center gap-1">
-          <button onClick={() => move(-1, 0)} className="w-10 h-10 rounded-md border border-zinc-300 bg-white hover:bg-zinc-50 cursor-pointer">↑</button>
+          <button onClick={() => move(-1, 0)} className="w-12 h-12 rounded-xl border-2 border-white/40 bg-white/90 hover:bg-white cursor-pointer">↑</button>
           <div className="flex gap-1">
-            <button onClick={() => move(0, -1)} className="w-10 h-10 rounded-md border border-zinc-300 bg-white hover:bg-zinc-50 cursor-pointer">←</button>
-            <button onClick={() => move(1, 0)} className="w-10 h-10 rounded-md border border-zinc-300 bg-white hover:bg-zinc-50 cursor-pointer">↓</button>
-            <button onClick={() => move(0, 1)} className="w-10 h-10 rounded-md border border-zinc-300 bg-white hover:bg-zinc-50 cursor-pointer">→</button>
+            <button onClick={() => move(0, -1)} className="w-12 h-12 rounded-xl border-2 border-white/40 bg-white/90 hover:bg-white cursor-pointer">←</button>
+            <button onClick={() => move(1, 0)} className="w-12 h-12 rounded-xl border-2 border-white/40 bg-white/90 hover:bg-white cursor-pointer">↓</button>
+            <button onClick={() => move(0, 1)} className="w-12 h-12 rounded-xl border-2 border-white/40 bg-white/90 hover:bg-white cursor-pointer">→</button>
           </div>
         </div>
 
-        {bumpMsg && <p className="mt-3 text-center text-sm font-medium text-red-700">{bumpMsg}</p>}
+        {bumpMsg && <div className="relative mt-3 text-center text-sm font-black text-rose-100"><HitBurst active tone="coral" /><span>{bumpMsg}</span></div>}
         {roundOver && (
           <p className="mt-3 text-center font-medium text-zinc-500">
             {saving ? "Finishing up…" : "Next maze coming up…"}
           </p>
         )}
 
-        <p className="mt-3 text-xs text-zinc-400 text-center">
+        <p className="mt-4 text-xs text-white/65 text-center">
           Answers stay hidden until you finish — you&rsquo;ll get a full review at the end.
         </p>
-      </div>
+      </ThemedCard>
     </div>
   );
 }
