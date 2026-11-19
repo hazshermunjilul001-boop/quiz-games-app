@@ -94,11 +94,30 @@ function attachExtractedImages(
     used.add(imageIndex);
   };
 
+  // A single Word image may contain four labeled panels (A–D) used as the
+  // answer choices for a consecutive group of questions. Give every question
+  // the same four choice labels, then attach the matching cropped panel.
+  images.forEach((image) => {
+    if (!image.choiceGroupQuestions) return;
+    image.choiceGroupQuestions.forEach((number) => {
+      const question = questionByNumber.get(number);
+      if (question && question.choices.length < 2) {
+        question.choices = ["Graph A", "Graph B", "Graph C", "Graph D"];
+      }
+    });
+  });
+
   // Choice diagrams are handled first. Their choice index is carried from the
   // nearest A., B., C. or D. paragraph in the DOCX, and their question number
   // is resolved against the original printed numbering rather than array index.
   images.forEach((image, imageIndex) => {
     if (image.choiceIndex === undefined) return;
+    if (image.choiceGroupQuestions) {
+      image.choiceGroupQuestions.forEach((number) => {
+        setChoiceImage(questionByNumber.get(number), image, imageIndex);
+      });
+      return;
+    }
     const question = image.questionNumber === undefined
       ? undefined
       : questionByNumber.get(image.questionNumber);
@@ -277,10 +296,12 @@ function parsePrintedMcqText(text: string, title: string, images: ExtractedImage
       continue;
     }
 
-    const sharedMatch = line.match(/^(.*?\b(?:questions?|items?)\s+(\d+)\s*(?:and|[-–])\s*(\d+)\b.*)$/i);
+    const sharedMatch = line.match(/^(.*?\b(?:questions?|items?)\s+(\d+)\s*(?:and|to|[-–])\s*(\d+)\b.*)$/i);
     if (sharedMatch) {
       sharedStem = sharedMatch[1].trim();
-      sharedStemNumbers = [Number(sharedMatch[2]), Number(sharedMatch[3])];
+      const start = Number(sharedMatch[2]);
+      const end = Number(sharedMatch[3]);
+      sharedStemNumbers = Array.from({ length: Math.max(0, end - start + 1) }, (_, index) => start + index);
       continue;
     }
 
