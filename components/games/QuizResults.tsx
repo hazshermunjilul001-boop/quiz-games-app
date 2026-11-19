@@ -13,6 +13,8 @@
 import { ReactNode } from "react";
 import Confetti from "./Confetti";
 import { formatDuration, AttemptSummary } from "@/lib/attempts";
+import { QuestionTable } from "@/lib/schema";
+import QuestionTables from "./QuestionTables";
 
 export interface ReviewItem {
   /** "Item 1", "Item 2", ... label shown in the review list. */
@@ -20,6 +22,7 @@ export interface ReviewItem {
   /** The question text (for True/False this includes the shown statement). */
   prompt: string;
   /** Optional diagram that was shown with the question. */
+  tables?: QuestionTable[];
   imageUrl?: string;
   imageAlt?: string;
   /** What the student answered, shown under the prompt. */
@@ -129,6 +132,7 @@ export default function QuizResults({
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">{item.label}</p>
                   <p className="text-sm font-semibold text-[var(--foreground)] leading-snug">{item.prompt}</p>
+                  {item.tables && <QuestionTables tables={item.tables} className="mt-2" />}
                   {item.imageUrl && (
                     <div className="my-2 flex justify-center">
                       <img

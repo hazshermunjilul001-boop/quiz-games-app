@@ -24,6 +24,7 @@ import QuizResults, { ReviewItem } from "./QuizResults";
 import Confetti from "./Confetti";
 import ThemedCard from "./ui/ThemedCard";
 import QuestionTransition from "./ui/QuestionTransition";
+import QuestionTables from "./QuestionTables";
 
 interface PreparedQuestion {
   q: McqQuestion;
@@ -139,6 +140,7 @@ export default function QuizGame({
       items.push({
         label: `Item ${prepared.q.number ?? qi + 1}`,
         prompt: prepared.q.prompt,
+        tables: prepared.q.tables,
         imageUrl: prepared.q.imageUrl,
         imageAlt: prepared.q.imageAlt,
         yourAnswer: picked === null ? "No answer" : prepared.shuffled[picked].text,
@@ -221,6 +223,7 @@ export default function QuizGame({
           <p className="text-2xl font-bold text-[var(--foreground)] leading-snug">
             <span className="whitespace-pre-line">{current.q.prompt}</span>
           </p>
+          {current.q.tables && <QuestionTables tables={current.q.tables} />}
           {current.q.imageUrl && (
             <div className="my-4 flex justify-center">
               <img

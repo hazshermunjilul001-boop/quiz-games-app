@@ -9,6 +9,7 @@ import PlaySession from "@/components/PlaySession";
 import Welcome from "@/components/Welcome";
 import CustomImport from "@/components/CustomImport";
 import ShareLinkModal from "@/components/ShareLinkModal";
+import QuestionTables from "@/components/games/QuestionTables";
 import { McqQuestion, Question, QuestionBank } from "@/lib/schema";
 
 type Screen = "welcome" | "import" | "custom" | "play";
@@ -25,15 +26,16 @@ export default function Home() {
     text: string,
     title: string,
     images: import("@/lib/fileParse").ExtractedImage[] = [],
-    source: QuestionBank["source"] = "paste"
+    source: QuestionBank["source"] = "paste",
+    tables: import("@/lib/fileParse").ExtractedTable[] = []
   ) {
     setError(null);
     try {
-      const res = importFromText(text, title, images, source);
+      const res = importFromText(text, title, images, source, tables);
       setResult(res);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setResult(null);
-      setError(e.message ?? "Couldn't parse this input.");
+      setError(e instanceof Error ? e.message : "Couldn't parse this input.");
     }
   }
 
@@ -44,9 +46,9 @@ export default function Home() {
       setRawText(extracted.text);
       const extension = file.name.split(".").pop()?.toLowerCase();
       const source: QuestionBank["source"] = extension === "docx" ? "docx" : extension === "pdf" ? "pdf" : "paste";
-      runImport(extracted.text, file.name.replace(/\.[^.]+$/, ""), extracted.images, source);
-    } catch (e: any) {
-      setError(e.message ?? "Couldn't read this file.");
+      runImport(extracted.text, file.name.replace(/\.[^.]+$/, ""), extracted.images, source, extracted.tables);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Couldn't read this file.");
     }
   }
 
@@ -200,16 +202,18 @@ function ImportPreview({
         };
       });
       onUpdateBank({ ...bank, questions: nextQuestions });
-    } catch (e: any) {
-      alert(e.message ?? "Couldn't attach image.");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "Couldn't attach image.");
     }
   }
 
   function removeDiagram(questionId: string) {
     const nextQuestions: Question[] = bank.questions.map((q) => {
       if (q.id !== questionId || q.type !== "mcq") return q;
-      const { imageUrl: _u, imageAlt: _a, ...rest } = q as McqQuestion;
-      return rest as McqQuestion;
+      const withoutDiagram: McqQuestion = { ...q };
+      delete withoutDiagram.imageUrl;
+      delete withoutDiagram.imageAlt;
+      return withoutDiagram;
     });
     onUpdateBank({ ...bank, questions: nextQuestions });
   }
@@ -249,6 +253,7 @@ function ImportPreview({
                   <p className="font-semibold text-[var(--foreground)]">
                     {q.number ?? i + 1}. <span className="whitespace-pre-line">{q.prompt}</span>
                   </p>
+                  {q.tables && <QuestionTables tables={q.tables} className="mt-2" />}
                   <ul className="mt-1 pl-4 space-y-0.5">
                     {q.choices.map((c, ci) => (
                       <li

@@ -4,8 +4,8 @@
 // game template downstream trusts the QuestionBank shape and never parses
 // raw text itself.
 
-import { McqQuestion, Question, QuestionBank, QuestionType } from "./schema";
-import { ExtractedImage } from "./fileParse";
+import { McqQuestion, Question, QuestionBank, QuestionTable, QuestionType } from "./schema";
+import { ExtractedImage, ExtractedTable } from "./fileParse";
 
 let idCounter = 0;
 function makeId(prefix: string): string {
@@ -32,23 +32,35 @@ export function importFromText(
   raw: string,
   title = "Imported Quiz",
   images: ExtractedImage[] = [],
-  source: QuestionBank["source"] = "paste"
+  source: QuestionBank["source"] = "paste",
+  tables: ExtractedTable[] = []
 ): ImportResult {
   const trimmed = raw.trim();
 
   // 1. Try canonical QuestionBank JSON (this app's own export format)
   const asBank = tryParseAsQuestionBank(trimmed);
-  if (asBank) return attachExtractedImages(asBank, images);
+  if (asBank) {
+    const withImages = attachExtractedImages(asBank, images);
+    return attachExtractedTables(withImages.bank, tables, withImages.warnings);
+  }
 
   // 2. Try TOS AI Generator's raw JSON item array
   const asTosJson = tryParseAsTosJson(trimmed, title);
-  if (asTosJson) return attachExtractedImages(asTosJson.bank, images, asTosJson.warnings);
+  if (asTosJson) {
+    const withImages = attachExtractedImages(
+      asTosJson.bank,
+      images,
+      asTosJson.warnings,
+      asTosJson.bank.questions.map((q, index) => q.number ?? index + 1)
+    );
+    return attachExtractedTables(withImages.bank, tables, withImages.warnings);
+  }
 
   // 3. Fall back to parsing printed test text (matches TOS AI Generator's
   //    printed layout: "1. Question [level]" / "A. choice" ... / answer key)
   const parsed = parsePrintedMcqText(trimmed, title, images);
   parsed.bank.source = source;
-  return parsed;
+  return attachExtractedTables(parsed.bank, tables, parsed.warnings);
 }
 
 function attachExtractedImages(
@@ -61,9 +73,9 @@ function attachExtractedImages(
 
   const questions = bank.questions.filter((q): q is McqQuestion => q.type === "mcq");
   const questionByNumber = new Map<number, McqQuestion>();
-  questionNumbers?.forEach((number, index) => {
-    const question = questions[index];
-    if (question) questionByNumber.set(number, question);
+  questions.forEach((question, index) => {
+    const number = question.number ?? questionNumbers?.[index];
+    if (number !== undefined) questionByNumber.set(number, question);
   });
   const used = new Set<number>();
   const warnings = [...existingWarnings];
@@ -94,9 +106,9 @@ function attachExtractedImages(
     used.add(imageIndex);
   };
 
-  // A single Word image may contain four labeled panels (A–D) used as the
-  // answer choices for a consecutive group of questions. Give every question
-  // the same four choice labels, then attach the matching cropped panel.
+  // A shared Word figure may contain four labeled panels (A–D) used by more
+  // than one question. Use the actual question numbers recorded during DOCX
+  // extraction, never an inferred consecutive range.
   images.forEach((image) => {
     if (!image.choiceGroupQuestions) return;
     image.choiceGroupQuestions.forEach((number) => {
@@ -129,7 +141,7 @@ function attachExtractedImages(
 
   // 1. Explicit filename/alt mention in the question stem.
   images.forEach((image, imageIndex) => {
-    if (image.choiceIndex !== undefined) return;
+    if (image.choiceIndex !== undefined || image.questionNumber !== undefined) return;
     const question = questions.find((q) => !q.imageUrl && filenameMatches(image, q));
     if (question) setImage(question, image, imageIndex);
   });
@@ -138,29 +150,69 @@ function attachExtractedImages(
   images.forEach((image, imageIndex) => {
     if (used.has(imageIndex) || image.choiceIndex !== undefined || image.questionNumber === undefined) return;
     const numbered = questionByNumber.get(image.questionNumber);
-    const question = numbered && !numbered.imageUrl
-      ? numbered
-      : questions.find(
-          (q) => !q.imageUrl && new RegExp(`(?:^|\\D)${image.questionNumber}(?:\\D|$)`).test(q.prompt)
-        );
-    setImage(question, image, imageIndex);
+    if (numbered && !numbered.imageUrl) setImage(numbered, image, imageIndex);
   });
 
-  // 3. Remaining images attach to the next unillustrated MCQ in order.
-  let nextQuestion = 0;
+  // Never guess an image's question by its position: an orphaned image is
+  // safer to report than to silently show beneath the wrong question.
   images.forEach((image, imageIndex) => {
     if (used.has(imageIndex)) return;
-    if (image.choiceIndex !== undefined) {
-      return;
-    }
-    while (nextQuestion < questions.length && questions[nextQuestion].imageUrl) nextQuestion++;
-    if (nextQuestion < questions.length) {
-      setImage(questions[nextQuestion], image, imageIndex);
-      nextQuestion++;
-    } else {
-      warnings.push(`Image ${imageIndex + 1} could not be matched to a multiple-choice question.`);
-    }
+    if (image.choiceIndex !== undefined) return;
+    warnings.push(
+      image.questionNumber === undefined
+        ? `Image ${imageIndex + 1} has no reliable question-number match and was not attached.`
+        : `Image ${imageIndex + 1} could not be matched to question ${image.questionNumber} and was not attached.`
+    );
   });
+
+  const finalWarnings = warnings.filter((warning) => {
+    const match = warning.match(/^Question (\d+): found fewer than 2 choices/i);
+    if (!match) return true;
+    const question = questionByNumber.get(Number(match[1]));
+    return !question || question.choices.length < 2;
+  });
+  return { bank, warnings: finalWarnings };
+}
+
+function attachExtractedTables(
+  bank: QuestionBank,
+  extractedTables: ExtractedTable[],
+  existingWarnings: string[] = []
+): ImportResult {
+  const questions = bank.questions.filter((q): q is McqQuestion => q.type === "mcq");
+  const questionByNumber = new Map<number, McqQuestion>();
+  questions.forEach((question, index) => questionByNumber.set(question.number ?? index + 1, question));
+  const tableByQuestion = new Map<number, QuestionTable[]>();
+  const warnings = [...existingWarnings];
+
+  for (const table of extractedTables) {
+    if (!table.rows.length) continue;
+    if (table.questionNumber === undefined) {
+      warnings.push("A table was found but could not be matched to a numbered question.");
+      continue;
+    }
+    const question = questionByNumber.get(table.questionNumber);
+    if (!question) {
+      warnings.push(`A table for question ${table.questionNumber} could not be matched to an imported question.`);
+      continue;
+    }
+    const questionTable: QuestionTable = { rows: table.rows, caption: table.caption };
+    question.tables = [...(question.tables ?? []), questionTable];
+    const existing = tableByQuestion.get(table.questionNumber) ?? [];
+    tableByQuestion.set(table.questionNumber, [...existing, questionTable]);
+  }
+
+  // Preserve references such as “Using the same table of values in item 16”.
+  for (const question of questions) {
+    if (question.tables?.length) continue;
+    const reference = question.prompt.match(
+      /\b(?:same|above|previous)\s+(?:table|chart|data|values?)\b.{0,100}?\b(?:item|question)\s*(\d+)\b/i
+    );
+    if (!reference) continue;
+    const referencedTables = tableByQuestion.get(Number(reference[1]));
+    if (referencedTables?.length) question.tables = referencedTables.map((table) => ({ ...table, rows: table.rows.map((row) => [...row]) }));
+    else warnings.push(`Question ${question.number ?? "?"} refers to a table that could not be found under item ${reference[1]}.`);
+  }
 
   return { bank, warnings };
 }
@@ -199,6 +251,7 @@ function tryParseAsTosJson(text: string, title: string): ImportResult | null {
       return {
         id: makeId("q"),
         type: "mcq",
+        number: it.number ?? idx + 1,
         prompt: it.question,
         choices,
         correctIndex: correctIndex === -1 ? 0 : correctIndex,
@@ -348,6 +401,14 @@ function parsePrintedMcqText(text: string, title: string, images: ExtractedImage
     }
     // anything else (stray noise) is ignored rather than breaking the scan
   }
+
+  // A document may place explanatory text (for example, an answer-letter
+  // distribution summary) between the answer-key heading and the table. The
+  // structured number/letter cells are authoritative, so apply them last.
+  answerKeyLines.forEach((line) => {
+    const row = line.match(/^__TABLE_ROW__\s*(\d+)\s*\|\s*([A-F])\b/i);
+    if (row) answerKey.set(Number(row[1]), row[2].toUpperCase());
+  });
 
   if (drafts.length === 0) {
     throw new Error(

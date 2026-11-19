@@ -26,6 +26,8 @@ export interface McqQuestion extends BaseQuestion {
   prompt: string;
   choices: string[]; // 2-6 choices
   correctIndex: number; // index into choices
+  /** Structured data tables that belong to this printed question. */
+  tables?: QuestionTable[];
   /** Optional diagram / figure shown under the prompt. */
   imageUrl?: string; // public URL, data URL, or path under /public
   /** Accessibility text for the diagram, e.g. "Venn diagram of sets A and B". */
@@ -34,6 +36,11 @@ export interface McqQuestion extends BaseQuestion {
   choiceImages?: (string | undefined)[];
   /** Accessibility text for each optional choice diagram. */
   choiceImageAlts?: (string | undefined)[];
+}
+
+export interface QuestionTable {
+  rows: string[][];
+  caption?: string;
 }
 
 export interface TermDefinitionQuestion extends BaseQuestion {

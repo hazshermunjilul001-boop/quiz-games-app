@@ -1,4 +1,4 @@
-import { importFromText, deriveTermDefinitionPairs, deriveOrderedSequenceFromMcq, deriveSingleTermFromMcq, deriveLetterSequenceFromMcq, deriveClozeFromMcq } from "../importPipeline";
+import { importFromText, deriveTermDefinitionPairs, deriveOrderedSequenceFromMcq, deriveSingleTermFromMcq, deriveWordOnlyTermsFromMcq, deriveLetterSequenceFromMcq, deriveClozeFromMcq } from "../importPipeline";
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {
@@ -86,8 +86,9 @@ assert(
 try {
   importFromText("this is not a test at all, just prose.", "Garbage");
   assert(false, "should have thrown on unparseable input");
-} catch (e: any) {
-  assert(/multiple-choice/i.test(e.message), "throws a helpful error on unparseable input");
+} catch (e: unknown) {
+  const message = e instanceof Error ? e.message : "";
+  assert(/multiple-choice/i.test(message), "throws a helpful error on unparseable input");
 }
 
 // --- Test 7: question numbers prefixed with a blank-to-write-on
@@ -288,7 +289,6 @@ assert(
 );
 
 // --- Test 14: word-only derivation excludes phrase answers (Word Search / Crossword safety) ---
-const { deriveWordOnlyTermsFromMcq } = require("../importPipeline");
 const phraseBank = importFromText(
   `
 1. What is the capital of France?
@@ -311,6 +311,56 @@ ANSWER KEY
 ).bank;
 const wordOnlyBank = deriveWordOnlyTermsFromMcq(phraseBank);
 assert(wordOnlyBank.questions.length === 1, "drops multi-word phrase answers, keeps only genuine single words");
-assert(wordOnlyBank.questions[0].term === "Paris", "the single word that survives is the correct one");
+assert(
+  wordOnlyBank.questions[0].type === "single-term" && wordOnlyBank.questions[0].term === "Paris",
+  "the single word that survives is the correct one"
+);
+
+// --- Test 15: structured tables attach by printed number and can be reused ---
+const tableImport = importFromText(
+  `16. True or False: The table of values represents a quadratic function?\nA. True\nB. False\n\n17. Using the same table of values in item 16, find the function.\nA. x^2 - 2x + 3\nB. x^2 + 2x + 3\n\nANSWER KEY\n16. A\n17. A`,
+  "Table Test",
+  [],
+  "docx",
+  [{ questionNumber: 16, rows: [["x", "−1", "0", "1", "2", "3"], ["y", "6", "3", "2", "3", "6"]] }]
+);
+const tableQ16 = tableImport.bank.questions.find((q) => q.number === 16);
+const tableQ17 = tableImport.bank.questions.find((q) => q.number === 17);
+assert(tableQ16?.type === "mcq" && tableQ16.tables?.[0]?.rows[1][5] === "6", "attaches the source table to its printed question number");
+assert(tableQ17?.type === "mcq" && tableQ17.tables?.[0]?.rows[0][1] === "−1", "reuses the table for a later question that refers back to item 16");
+assert(tableImport.warnings.length === 0, "does not warn when a referenced table is correctly matched");
+
+// --- Test 16: graph-choice images stay attached to their exact item numbers ---
+const graphQuestions = [39, 40, 41, 42].map((number) => `${number}. Which graph matches item ${number}?\nA. Graph A\nB. Graph B\nC. Graph C\nD. Graph D`).join("\n\n");
+const graphKey = `\n\nANSWER KEY\n39. A\n40. B\n41. C\n42. D`;
+const graphImages = [0, 1, 2, 3].map((choiceIndex) => ({
+  dataUrl: `data:image/png;base64,graph-${choiceIndex}`,
+  questionNumber: 39,
+  choiceIndex,
+  choiceGroupQuestions: [39, 40, 41, 42],
+}));
+const graphImport = importFromText(graphQuestions + graphKey, "Graph Test", graphImages, "docx");
+assert(graphImport.bank.questions.length === 4, "imports all four graph questions");
+assert(graphImport.bank.questions.every((q) => q.type === "mcq" && q.choiceImages?.length === 4), "adds all four graph choices to each question in the shared figure group");
+assert(graphImport.bank.questions.map((q) => q.number).join(",") === "39,40,41,42", "retains the original printed item numbers for diagram questions");
+assert(graphImport.warnings.length === 0, "does not keep a missing-choice warning after graph choices are attached");
+
+// --- Test 17: authoritative answer-table rows override explanatory prose ---
+const authoritativeKey = importFromText(
+  `1. First question?\nA. First A\nB. First B\n2. Second question?\nA. Second A\nB. Second B\nANSWER KEY\nAnswer distribution check — A: 1 item, B: 1 item (out of 2).\n__TABLE_ROW__1 | B | Keyed answer\n__TABLE_ROW__2 | A | Keyed answer`,
+  "Authoritative Key Test"
+);
+assert(authoritativeKey.bank.questions[0].type === "mcq" && authoritativeKey.bank.questions[0].correctIndex === 1, "takes the answer for item 1 from its structured answer-table row");
+assert(authoritativeKey.bank.questions[1].type === "mcq" && authoritativeKey.bank.questions[1].correctIndex === 0, "takes the answer for item 2 from its structured answer-table row");
+
+// --- Test 18: an unmatched image is reported, not placed on the next item ---
+const orphanImage = importFromText(
+  "1. Which choice is correct?\nA. Yes\nB. No\n\nANSWER KEY\n1. A",
+  "Orphan Image Test",
+  [{ dataUrl: "data:image/png;base64,orphan" }],
+  "docx"
+);
+assert(orphanImage.bank.questions[0].type === "mcq" && !orphanImage.bank.questions[0].imageUrl, "does not guess an unnumbered image onto a question");
+assert(orphanImage.warnings.some((warning) => warning.includes("no reliable question-number match")), "warns when an image cannot be safely matched");
 
 console.log("\nDone.");

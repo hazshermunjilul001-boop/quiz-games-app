@@ -13,16 +13,23 @@ export type ExtractedImage = {
   choiceGroupQuestions?: number[];
 };
 
+export type ExtractedTable = {
+  rows: string[][];
+  questionNumber?: number;
+  caption?: string;
+};
+
 export type ExtractedFile = {
   text: string;
   images: ExtractedImage[];
+  tables: ExtractedTable[];
 };
 
 export async function extractFromFile(file: File): Promise<ExtractedFile> {
   const name = file.name.toLowerCase();
 
   if (name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".json")) {
-    return { text: await file.text(), images: [] };
+    return { text: await file.text(), images: [], tables: [] };
   }
 
   if (name.endsWith(".docx")) {
@@ -33,7 +40,7 @@ export async function extractFromFile(file: File): Promise<ExtractedFile> {
     const result = await mammoth.convertToHtml(
       { arrayBuffer },
       {
-        convertImage: mammoth.images.imgElement(async (image: any) => {
+        convertImage: mammoth.images.imgElement(async (image) => {
           const base64 = await image.read("base64");
           const contentType = image.contentType || "image/png";
           return { src: `data:${contentType};base64,${base64}` };
@@ -56,10 +63,10 @@ export async function extractFromFile(file: File): Promise<ExtractedFile> {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      const pageText = content.items.map((it: any) => it.str).join(" ");
+      const pageText = content.items.map((item) => ("str" in item ? item.str : "")).join(" ");
       fullText += pageText + "\n";
     }
-    return { text: fullText, images: [] };
+    return { text: fullText, images: [], tables: [] };
   }
 
   throw new Error("Unsupported file type. Please upload a .txt, .docx, .pdf, or .json file.");
@@ -92,8 +99,10 @@ function docxHtmlToStructuredText(html: string, mathByBlock: string[] = []): Ext
   const doc = new DOMParser().parseFromString(html, "text/html");
   const lines: string[] = [];
   const images: ExtractedImage[] = [];
+  const tables: ExtractedTable[] = [];
   let latestQuestionNumber: number | undefined;
   let latestChoiceIndex: number | undefined;
+  let inAnswerKey = false;
 
   const collectImages = (root: Element, questionHint?: number, choiceHint?: number) => {
     for (const img of Array.from(root.querySelectorAll("img"))) {
@@ -114,7 +123,10 @@ function docxHtmlToStructuredText(html: string, mathByBlock: string[] = []): Ext
   for (const el of Array.from(doc.body.children)) {
     const rawBlockText = mathByBlock[blockIndex++];
     if (el.tagName === "TABLE") {
-      for (const row of Array.from(el.querySelectorAll("tr"))) {
+      const rows = Array.from(el.querySelectorAll("tr")).map((row) =>
+        Array.from(row.querySelectorAll("td,th")).map((cell) => (cell.textContent ?? "").trim())
+      );
+      for (const [rowIndex, row] of Array.from(el.querySelectorAll("tr")).entries()) {
         const cells = Array.from(row.querySelectorAll("td,th"));
         const choiceCells = cells
           .map((cell) => ({ cell, choiceIndex: choiceIndexIn((cell.textContent ?? "").trim()) }))
@@ -133,8 +145,13 @@ function docxHtmlToStructuredText(html: string, mathByBlock: string[] = []): Ext
           continue;
         }
 
-        const cellText = cells.map((cell) => (cell.textContent ?? "").trim()).filter(Boolean);
-        if (cellText.length > 0) lines.push(`__TABLE_ROW__${cellText.join(" | ")}`);
+        const nonEmptyRows = rows.filter((cellsInRow) => cellsInRow.some(Boolean));
+        if (inAnswerKey) {
+          const cellsInRow = rows[rowIndex].filter((value) => value.length > 0);
+          if (cellsInRow.length > 0) lines.push(`__TABLE_ROW__${cellsInRow.join(" | ")}`);
+        } else if (rowIndex === 0 && nonEmptyRows.length > 0) {
+          tables.push({ rows: nonEmptyRows, questionNumber: latestQuestionNumber });
+        }
         cells.forEach((cell) => collectImages(cell, latestQuestionNumber));
       }
       continue;
@@ -151,9 +168,10 @@ function docxHtmlToStructuredText(html: string, mathByBlock: string[] = []): Ext
     collectImages(el, localQuestionNumber, localChoiceIndex);
 
     if (text) lines.push(text);
+    if (/^answer\s*key\b/i.test(text)) inAnswerKey = true;
   }
 
-  return { text: lines.join("\n"), images };
+  return { text: lines.join("\n"), images, tables };
 }
 
 /**
@@ -248,6 +266,7 @@ function xmlLocalName(node: Element): string {
 async function expandFourPanelChoiceGroups(extracted: ExtractedFile): Promise<ExtractedFile> {
   if (typeof Image === "undefined" || typeof document === "undefined") return extracted;
   const images: ExtractedImage[] = [];
+  const processedFourPanels = new Set<string>();
   for (const image of extracted.images) {
     const size = await getImageSize(image.dataUrl);
     const isFourPanel = image.questionNumber !== undefined
@@ -260,6 +279,9 @@ async function expandFourPanelChoiceGroups(extracted: ExtractedFile): Promise<Ex
       images.push(image);
       continue;
     }
+    if (processedFourPanels.has(image.dataUrl)) continue;
+
+    processedFourPanels.add(image.dataUrl);
 
     const midX = Math.floor(size.width / 2);
     const midY = Math.floor(size.height / 2);
@@ -269,7 +291,11 @@ async function expandFourPanelChoiceGroups(extracted: ExtractedFile): Promise<Ex
       [0, midY, midX, size.height - midY],
       [midX, midY, size.width - midX, size.height - midY],
     ] as const;
-    const groupQuestions = [0, 1, 2, 3].map((offset) => image.questionNumber! + offset);
+    const groupQuestions = Array.from(new Set(
+      extracted.images
+        .filter((candidate) => candidate.dataUrl === image.dataUrl && candidate.questionNumber !== undefined)
+        .map((candidate) => candidate.questionNumber as number)
+    )).sort((a, b) => a - b);
     for (let choiceIndex = 0; choiceIndex < crops.length; choiceIndex++) {
       const [x, y, width, height] = crops[choiceIndex];
       images.push({
