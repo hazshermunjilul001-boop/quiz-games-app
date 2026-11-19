@@ -247,7 +247,7 @@ function ImportPreview({
               {q.type === "mcq" && (
                 <>
                   <p className="font-semibold text-[var(--foreground)]">
-                    {i + 1}. {q.prompt}
+                    {q.number ?? i + 1}. <span className="whitespace-pre-line">{q.prompt}</span>
                   </p>
                   <ul className="mt-1 pl-4 space-y-0.5">
                     {q.choices.map((c, ci) => (

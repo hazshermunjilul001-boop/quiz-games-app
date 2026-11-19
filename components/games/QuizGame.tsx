@@ -137,7 +137,7 @@ export default function QuizGame({
       const isCorrect = picked !== null && prepared.shuffled[picked].isCorrect;
       if (isCorrect) score++;
       items.push({
-        label: `Item ${qi + 1}`,
+        label: `Item ${prepared.q.number ?? qi + 1}`,
         prompt: prepared.q.prompt,
         imageUrl: prepared.q.imageUrl,
         imageAlt: prepared.q.imageAlt,
@@ -215,8 +215,11 @@ export default function QuizGame({
       <ThemedCard family="classic" className="mt-6 p-5 sm:p-8">
         <QuestionTransition transitionKey={current.q.id}>
         <div className="space-y-4">
+          <p className="text-xs font-bold uppercase tracking-widest text-brand">
+            Item {current.q.number ?? index + 1}
+          </p>
           <p className="text-2xl font-bold text-[var(--foreground)] leading-snug">
-            {current.q.prompt}
+            <span className="whitespace-pre-line">{current.q.prompt}</span>
           </p>
           {current.q.imageUrl && (
             <div className="my-4 flex justify-center">

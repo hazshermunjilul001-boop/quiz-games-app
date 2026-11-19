@@ -72,6 +72,7 @@ function attachExtractedImages(
   const filenameMatches = (image: ExtractedImage, question: McqQuestion) => {
     if (!image.nameHint) return false;
     const hint = normalized(image.nameHint);
+    if (["figure", "image", "diagram", "photo", "picture"].includes(hint)) return false;
     return Boolean(hint) && normalized(question.prompt).includes(hint);
   };
 
@@ -240,6 +241,17 @@ function parsePrintedMcqText(text: string, title: string, images: ExtractedImage
 
   let inAnswerKey = false;
   let current: Draft | null = null;
+  let sharedStem: string | undefined;
+  let sharedStemNumbers: number[] = [];
+
+  const cleanContinuation = (line: string) =>
+    line.startsWith("__TABLE_ROW__") ? line.replace(/^__TABLE_ROW__/, "") : line;
+
+  const appendPromptLine = (line: string) => {
+    if (!current) return;
+    const value = cleanContinuation(line);
+    if (value) current.prompt = current.prompt ? `${current.prompt}\n${value}` : value;
+  };
 
   for (const line of lines) {
     if (answerKeyHeaderRe.test(line)) {
@@ -259,7 +271,16 @@ function parsePrintedMcqText(text: string, title: string, images: ExtractedImage
       if (current) drafts.push(current);
       const bracketMatch = qMatch[2].match(/\[([A-Za-z\s]+)\]\s*$/);
       const promptRaw = qMatch[2].replace(/\[[A-Za-z\s]+\]\s*$/, "").trim();
-      current = { number: parseInt(qMatch[1], 10), prompt: promptRaw, choices: [], level: bracketMatch?.[1].trim() };
+      const number = parseInt(qMatch[1], 10);
+      const shared = sharedStemNumbers.includes(number) && sharedStem ? `${sharedStem}\n\n` : "";
+      current = { number, prompt: `${shared}${promptRaw}`, choices: [], level: bracketMatch?.[1].trim() };
+      continue;
+    }
+
+    const sharedMatch = line.match(/^(.*?\b(?:questions?|items?)\s+(\d+)\s*(?:and|[-–])\s*(\d+)\b.*)$/i);
+    if (sharedMatch) {
+      sharedStem = sharedMatch[1].trim();
+      sharedStemNumbers = [Number(sharedMatch[2]), Number(sharedMatch[3])];
       continue;
     }
 
@@ -268,6 +289,15 @@ function parsePrintedMcqText(text: string, title: string, images: ExtractedImage
       current.choices.push(cMatch[2]);
       continue;
     }
+
+    if (current) {
+      if (current.choices.length > 0) {
+        const last = current.choices.length - 1;
+        current.choices[last] = `${current.choices[last]} ${cleanContinuation(line)}`.trim();
+      } else {
+        appendPromptLine(line);
+      }
+    }
   }
   if (current) drafts.push(current);
 
@@ -275,7 +305,13 @@ function parsePrintedMcqText(text: string, title: string, images: ExtractedImage
   // in order. This is format-agnostic: works for "1. B" on one line, for
   // "1" and "B" on separate lines (flattened docx table cells), and for
   // "1  B  2  D" space-separated on one line.
+  answerKeyLines.forEach((line) => {
+    const row = line.match(/^__TABLE_ROW__\s*(\d+)\s*\|\s*([A-F])\b/i);
+    if (row) answerKey.set(Number(row[1]), row[2].toUpperCase());
+  });
+
   const tokens = answerKeyLines
+    .filter((line) => !line.startsWith("__TABLE_ROW__"))
     .join(" ")
     .split(/\s+/)
     .map((t) => t.replace(/[.,:)]+$/, ""))
@@ -314,6 +350,7 @@ function parsePrintedMcqText(text: string, title: string, images: ExtractedImage
     return {
       id: makeId("q"),
       type: "mcq" as QuestionType,
+      number: d.number,
       prompt: d.prompt,
       choices: d.choices,
       correctIndex,

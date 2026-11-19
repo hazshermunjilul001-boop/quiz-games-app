@@ -13,6 +13,8 @@ export type QuestionType =
 export interface BaseQuestion {
   id: string;
   type: QuestionType;
+  /** Original printed item number from the source exam, when available. */
+  number?: number;
   /** Optional grouping label, e.g. topic or category — used by Group Sort, Crossword clue sets. */
   category?: string;
   /** Optional — carried over from TOS AI Generator's difficulty rating, unused by most templates. */

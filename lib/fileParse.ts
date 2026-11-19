@@ -65,8 +65,8 @@ export async function extractTextFromFile(file: File): Promise<string> {
 }
 
 function questionNumberIn(text: string): number | undefined {
-  const match = text.match(/(?:^|\b)(?:question|item)\s*(\d+)\b|^\s*(\d+)\s*[.)]/i);
-  const number = match?.[1] ?? match?.[2];
+  const match = text.match(/(?:^|\b)(?:questions?|items?)\s*(\d+)\s*(?:and|[-–])\s*\d+\b|(?:^|\b)(?:question|item)\s*(\d+)\b|^\s*(\d+)\s*[.)]/i);
+  const number = match?.[1] ?? match?.[2] ?? match?.[3];
   return number ? Number(number) : undefined;
 }
 
@@ -124,13 +124,9 @@ function docxHtmlToStructuredText(html: string): ExtractedFile {
           continue;
         }
 
-        for (let i = 0; i < cells.length - 1; i += 2) {
-          const num = (cells[i].textContent ?? "").trim();
-          const ans = (cells[i + 1].textContent ?? "").trim();
-          if (/^\d+$/.test(num) && ans) lines.push(`${num}. ${ans}`);
-          collectImages(cells[i], questionNumberIn(num));
-          collectImages(cells[i + 1], questionNumberIn(num));
-        }
+        const cellText = cells.map((cell) => (cell.textContent ?? "").trim()).filter(Boolean);
+        if (cellText.length > 0) lines.push(`__TABLE_ROW__${cellText.join(" | ")}`);
+        cells.forEach((cell) => collectImages(cell, latestQuestionNumber));
       }
       continue;
     }
