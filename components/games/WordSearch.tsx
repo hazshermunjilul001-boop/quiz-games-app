@@ -63,7 +63,7 @@ export default function WordSearch({ bank, onExit }: { bank: QuestionBank; onExi
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto w-full max-w-6xl">
       <GameHeader title="Word Search" progress={`${foundWords.size} / ${grid.placed.length} found`} onExit={onExit} />
       <p className="text-xs text-zinc-500 mt-1">Tap the first letter of a word, then tap its last letter.</p>
 
@@ -94,7 +94,7 @@ export default function WordSearch({ bank, onExit }: { bank: QuestionBank; onExi
                   key={`${r}-${c}`}
                   onClick={() => cellClick(r, c)}
                   className={[
-                    "w-7 h-7 flex items-center justify-center text-xs font-bold rounded cursor-pointer border",
+                    "flex h-7 w-7 items-center justify-center rounded border text-xs font-bold cursor-pointer sm:h-8 sm:w-8 lg:h-9 lg:w-9 lg:text-sm",
                     isFound ? "bg-green-100 border-green-300 text-green-800" : "",
                     isSelected ? "bg-indigo-100 border-indigo-400 text-indigo-900" : "",
                     !isFound && !isSelected ? "bg-white border-zinc-200 text-zinc-800 hover:bg-zinc-50" : "",

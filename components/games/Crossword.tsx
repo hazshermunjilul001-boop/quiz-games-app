@@ -49,7 +49,7 @@ export default function Crossword({ bank, onExit }: { bank: QuestionBank; onExit
   }, 0);
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="mx-auto w-full max-w-6xl">
       <GameHeader title="Crossword" onExit={onExit} />
       {grid.skipped.length > 0 && (
         <p className="text-xs text-amber-600 mt-1">

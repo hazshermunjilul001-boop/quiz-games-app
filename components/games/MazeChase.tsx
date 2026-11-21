@@ -241,7 +241,7 @@ export default function MazeChase({
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl">
       <GameHeader
         key={runId}
         title="Maze Chase"
@@ -255,7 +255,7 @@ export default function MazeChase({
           Run to the answer for: <span className="text-emerald-200">{current.prompt}</span>
         </p>
 
-        <div className="grid gap-1.5 mx-auto rounded-2xl bg-slate-950/70 p-2 border-4 border-emerald-300/30 shadow-inner" style={{ gridTemplateColumns: `repeat(${GRID}, minmax(0, 1fr))`, maxWidth: 360 }}>
+        <div className="grid gap-1.5 mx-auto rounded-2xl bg-slate-950/70 p-2 border-4 border-emerald-300/30 shadow-inner" style={{ gridTemplateColumns: `repeat(${GRID}, minmax(0, 1fr))`, maxWidth: 440 }}>
           {grid.map((row, r) =>
             row.map((cell, c) => {
               const isPlayer = pos.row === r && pos.col === c;

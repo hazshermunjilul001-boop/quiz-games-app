@@ -44,7 +44,7 @@ export default function GroupSort({ bank, onExit }: { bank: QuestionBank; onExit
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl">
       <GameHeader title="Group Sort" progress={`${Object.keys(placements).length} / ${items.length}`} onExit={onExit} />
       <p className="text-xs text-zinc-500 mt-1">Tap an item, then tap the group it belongs to.</p>
 

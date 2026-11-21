@@ -24,12 +24,14 @@ import GameIntro from "@/components/games/GameIntro";
 import StudentBar from "@/components/StudentBar";
 import { StudentSession } from "@/lib/studentAuth";
 import { ATTEMPT_TRACKED_TEMPLATES, AttemptContext, getNextAttemptNumber } from "@/lib/attempts";
+import { getNativeFormatForTemplate } from "@/lib/customFormats";
 
 export default function PlaySession({
   bank,
   onBack,
   backLabel = "Back to import",
   lockedTemplateId,
+  initialTemplateId,
   allowSharing = false,
   onCreateCustom,
   student,
@@ -46,12 +48,14 @@ export default function PlaySession({
    * game replays its intro rather than returning to a picker, since
    * there's nothing to pick from on a locked link. */
   lockedTemplateId?: string | null;
+  /** Optional starting game for the teacher's game-first native creation path. */
+  initialTemplateId?: string | null;
   /** Show "Share this game" per template — only for the teacher's own
    * session, never for a student on a shared link. */
   allowSharing?: boolean;
   /** Jump to the custom-content flow — only meaningful for the teacher's
    * own session, never for a student on a shared link. */
-  onCreateCustom?: () => void;
+  onCreateCustom?: (templateId?: string, sourceBank?: QuestionBank) => void;
   /** Signed-in student on a shared link — shows the StudentBar and enables
    * attempt tracking. Omit for the teacher's own session. */
   student?: StudentSession | null;
@@ -61,7 +65,7 @@ export default function PlaySession({
   /** The /play/[code] share code — attempt history is keyed by it. */
   shareCode?: string;
 }) {
-  const [templateId, setTemplateId] = useState<string | null>(lockedTemplateId ?? null);
+  const [templateId, setTemplateId] = useState<string | null>(lockedTemplateId ?? initialTemplateId ?? null);
   const [started, setStarted] = useState(false);
   const isLocked = Boolean(lockedTemplateId);
 
@@ -83,6 +87,11 @@ export default function PlaySession({
     if (template) {
       const Game = template.component;
       const bankForTemplate = getBankForTemplate(bank, template);
+      const showNativeContentNotice =
+        Boolean(onCreateCustom && getNativeFormatForTemplate(template.id)) &&
+        bank.questions.length > 0 &&
+        bank.questions.every((question) => question.type === "mcq") &&
+        bankForTemplate.questions.some((question) => question.type !== "mcq");
 
       // Attempt prompt: for every game that records attempts (the quiz
       // formats AND the exam-mode arcade games).
@@ -111,17 +120,33 @@ export default function PlaySession({
       return (
         <div className={`min-h-screen bg-gradient-to-br ${getGameTheme(templateId!)}`}>
           {studentBar}
-          <div className="max-w-3xl mx-auto px-6 py-10">
+          <div className={`mx-auto w-full ${started ? "max-w-7xl px-4 py-4 sm:px-6 sm:py-6" : "max-w-3xl px-6 py-10"}`}>
             {started ? (
               <Game bank={bankForTemplate} onExit={exitGame} attemptContext={attemptContext} />
             ) : (
-              <GameIntro
-                title={template.name}
-                description={template.description}
-                icon={template.icon}
-                attemptBadge={attemptBadge}
-                onStart={() => setStarted(true)}
-              />
+              <>
+                {showNativeContentNotice && (
+                  <aside className="mb-5 flex flex-col gap-3 rounded-2xl border border-gold/40 bg-gold/10 p-4 sm:flex-row sm:items-center sm:justify-between" role="note">
+                    <p className="text-sm leading-relaxed text-zinc-700">
+                      This content was auto-converted from multiple-choice. For better results with <strong>{template.name}</strong>, you can create a native version instead.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onCreateCustom?.(template.id, bank)}
+                      className="shrink-0 rounded-xl border border-gold/50 bg-white px-4 py-2.5 text-sm font-bold text-brand hover:bg-gold/10"
+                    >
+                      Create native content →
+                    </button>
+                  </aside>
+                )}
+                <GameIntro
+                  title={template.name}
+                  description={template.description}
+                  icon={template.icon}
+                  attemptBadge={attemptBadge}
+                  onStart={() => setStarted(true)}
+                />
+              </>
             )}
           </div>
         </div>

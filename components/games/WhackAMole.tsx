@@ -246,7 +246,7 @@ export default function WhackAMole({
   }
 
   return (
-    <div className="max-w-xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl">
       <GameHeader
         key={runId}
         title="Whack-a-Mole"

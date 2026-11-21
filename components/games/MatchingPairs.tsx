@@ -65,10 +65,10 @@ export default function MatchingPairs({ bank, onExit }: { bank: QuestionBank; on
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl">
       <GameHeader title="Matching Pairs" progress={`${matched.size / 2} / ${pairs.length} pairs · ${moves} moves`} onExit={onExit} />
 
-      <ThemedCard family="paper" className="mt-6 grid grid-cols-3 sm:grid-cols-4 gap-3">
+      <ThemedCard family="paper" className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         {tiles.map((tile) => {
           const isMatched = matched.has(tile.key);
           const isSelected = selected.includes(tile.key);

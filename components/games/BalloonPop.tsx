@@ -87,7 +87,7 @@ export default function BalloonPop({ bank, onExit }: { bank: QuestionBank; onExi
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto w-full max-w-6xl">
       <GameHeader title="Balloon Pop" progress={`${index + 1} / ${pairs.length} · score ${score}`} onExit={onExit} />
 
       <ThemedCard family="arcade" className="mt-6">

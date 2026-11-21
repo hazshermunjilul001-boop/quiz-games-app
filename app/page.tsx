@@ -21,6 +21,18 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [customTemplateId, setCustomTemplateId] = useState<string | null>(null);
+  const [customSourceBank, setCustomSourceBank] = useState<QuestionBank | null>(null);
+  const [customReturnScreen, setCustomReturnScreen] = useState<"welcome" | "import" | "play">("welcome");
+  const [initialPlayTemplateId, setInitialPlayTemplateId] = useState<string | null>(null);
+  const [initialPlayBankId, setInitialPlayBankId] = useState<string | null>(null);
+
+  function openCustomCreator(templateId?: string, sourceBank?: QuestionBank) {
+    setCustomTemplateId(templateId ?? null);
+    setCustomSourceBank(sourceBank ?? null);
+    setCustomReturnScreen(screen === "custom" ? "import" : screen);
+    setScreen("custom");
+  }
 
   function runImport(
     text: string,
@@ -57,7 +69,7 @@ export default function Home() {
   }
 
   if (screen === "welcome") {
-    return <Welcome onGetStarted={() => setScreen("import")} />;
+    return <Welcome onGetStarted={() => setScreen("import")} onCreateNative={() => openCustomCreator()} />;
   }
 
   if (screen === "custom") {
@@ -65,9 +77,14 @@ export default function Home() {
       <div className="min-h-screen bg-[var(--background)]">
         <main className="max-w-3xl mx-auto py-12 px-6">
           <CustomImport
-            onBack={() => setScreen("import")}
-            onParsed={(customResult) => {
+            onBack={() => setScreen(customReturnScreen)}
+            backLabel={customReturnScreen === "welcome" ? "Back to welcome" : customReturnScreen === "play" ? "Back to games" : "Back to import"}
+            initialTemplateId={customTemplateId}
+            sourceBank={customSourceBank}
+            onParsed={(customResult, templateId) => {
               setResult(customResult);
+              setInitialPlayTemplateId(templateId);
+              setInitialPlayBankId(customResult.bank.id);
               setScreen("play");
             }}
           />
@@ -82,7 +99,8 @@ export default function Home() {
         bank={result.bank}
         onBack={() => setScreen("import")}
         allowSharing
-        onCreateCustom={() => setScreen("custom")}
+        initialTemplateId={result.bank.id === initialPlayBankId ? initialPlayTemplateId : null}
+        onCreateCustom={(templateId, sourceBank) => openCustomCreator(templateId, sourceBank)}
       />
     );
   }

@@ -50,7 +50,7 @@ export default function MatchUp({ bank, onExit }: { bank: QuestionBank; onExit: 
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl">
       <GameHeader title="Match Up" progress={`${Object.keys(matches).length} / ${pairs.length}`} onExit={onExit} />
       <p className="text-xs text-zinc-500 mt-1">Tap a keyword, then tap its matching definition.</p>
 
